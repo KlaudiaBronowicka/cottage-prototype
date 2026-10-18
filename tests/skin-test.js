@@ -32,7 +32,8 @@ var strings = [];
   else if (Array.isArray(o)) o.forEach(walk);
   else if (o && typeof o === 'object') Object.keys(o).forEach(function (k) { if (k !== 'SKINS') walk(o[k]); });
 })(TXT);
-CONFIG.deck.forEach(function (c) { strings.push(c.name, c.text, c.flavour); });
+var UT = require('../data/ui-text.js');
+Object.keys(UT.cards).forEach(function (k) { var c = UT.cards[k]; strings.push(c.name, c.text, c.flavour); }); // player-facing card text lives in the string table
 var naive = function (s, sk) { return s.replace(/\{(\w+)\}/g, function (m, k) { return typeof sk[k] === 'string' ? sk[k] : m; }); };
 var checked = 0;
 strings.forEach(function (s) {

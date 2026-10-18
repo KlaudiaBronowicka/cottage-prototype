@@ -1,50 +1,173 @@
 /* =====================================================================
- * ui.js — greybox DOM UI. All rules live in game.js; numbers in config.js;
- * text in data/vn-text.js. This file only renders and routes clicks.
+ * ui.js — DOM UI for the cottage encounter. Rules: game.js. Numbers: config.js.
+ * Every player-facing word: data/ui-text.js (UI) and data/vn-text.js (story).
+ * Art: assets/manifest.js (generated). Positions: data/board-layout.js.
+ * The encounter is drawn on a 1920x1080 stage that scales to the window.
  * ===================================================================== */
 (function () {
   'use strict';
-  var cfg = CONFIG, TXT = VN_TEXT;
+  var cfg = CONFIG, TXT = VN_TEXT, UT = UI_TEXT, A = ASSET_MANIFEST, BL = BOARD_LAYOUT;
   var qs = new URLSearchParams(location.search);
-  var app = document.getElementById('app');
+  var stage = document.getElementById('stage'), wrap = document.getElementById('stageWrap');
+  var layer = document.getElementById('layer');           // screen-pixel layer: tooltip, zoom, toasts
   var dbg = document.getElementById('debug');
   var overlay = document.getElementById('overlay'), overlayBox = document.getElementById('overlayBox');
+  var coach = document.getElementById('coach');
   var store = new Stats.Store(cfg.statsStorageKey);
+  var TUT_KEY = cfg.statsStorageKey + '.tutorialDone';
+  var ECFG = Engine.effectiveConfig(cfg);                // config with the rule flags applied (for the UI before a game exists)
+
+  // URL overrides: ?skin=A ?seed=1 ?debug=1 ?icons=mono ?tutorial=0|1 ?terms=TERM_QUESTIONS:Secrets,TERM_DREAD:Fear ?layout=1
+  var TERMS = Object.assign({}, UT.terms);
+  (qs.get('terms') || '').split(',').forEach(function (p) { var i = p.indexOf(':'); if (i > 0) TERMS[p.slice(0, i).trim()] = p.slice(i + 1).trim(); });
+  var ICON_STYLE = qs.get('icons') || cfg.iconStyle;
 
   var U = {
     screen: 'title', game: null,
     skin: qs.get('skin') || cfg.defaultSkin,
     seed: qs.get('seed') ? parseInt(qs.get('seed'), 10) : null,
     tester: qs.get('tester') || '',
+    wantTutorial: qs.get('tutorial') ? qs.get('tutorial') === '1' : !safeGet(TUT_KEY),
     choices: { bond: null, key: null, visited: [] },
-    steps: [], stepIdx: 0, spotPick: [],
-    test: null, alloc: [], msg: null, lastResult: null,
-    tStart: 0, tEncounter: 0, saved: false, runId: null
+    steps: [], stepIdx: 0, revealed: [],
+    tray: null, moveMode: false, pinned: null, alloc: [], lastRound: 0, feedSeen: 0,
+    hints: cfg.hintsNight2, tut: null, tutInfo: null,
+    tStart: 0, tEncounter: 0, saved: false, runId: null, outroSteps: null, outroIdx: 0
   };
   if (qs.get('debug') === '1') dbg.classList.remove('hidden');
+  if (qs.get('layout') === '1') document.body.classList.add('showLayout');
+  if (ICON_STYLE === 'mono') document.body.classList.add('iconsMono');
 
-  // ---------- helpers ----------
+  function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
+
+  // ---------- text ----------
   function names() { return TXT.SKINS[U.skin] || TXT.SKINS.neutral; }
-  function t(s) { return Skin.applySkin(s, names()); } // article-aware slot substitution (skin.js)
+  function cap(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function term(k) { return TERMS[k] != null ? TERMS[k] : '⟦' + k + '⟧'; }
+  /** fill a string-table template: {t.KEY} {T.KEY} {#n:SING:PLUR} {var} then character slots via skin.js */
+  function fmt(s, v) {
+    v = v || {};
+    s = String(s == null ? '' : s)
+      .replace(/\{#(\w+):(\w+):(\w+)\}/g, function (m, n, a, b) { return term(+v[n] === 1 ? a : b); })
+      .replace(/\{([tT])\.(\w+)\}/g, function (m, c, k) { var x = term(k); return c === 'T' ? cap(x) : x; })
+      .replace(/\{([a-z]\w*)\}/g, function (m, k) { return k in v ? v[k] : m; });
+    return Skin.applySkin(s, names());
+  }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function T(s) { return esc(t(s)); }
-  function el(html) { var d = document.createElement('div'); d.innerHTML = html; return d; }
-  function on(id, fn) { var e = document.getElementById(id); if (e) e.onclick = fn; }
-  function icons(arr) { return arr.map(function (i) { return '<span class="icon" title="' + Engine.STAT_OF_ICON[i] + '">' + i + '</span>'; }).join(''); }
-  function zoneIdx(id) { for (var i = 0; i < cfg.zones.length; i++) if (cfg.zones[i].id === id) return i; return -1; }
-  function newSeed() { return Math.floor(Math.random() * 1e9); }
+  function dirs(html) { return html.replace(/\[([^\]]*)\]/g, '<em class="dir">$1</em>'); } // [stage direction] → italics
+  function L(path) {
+    var o = UT; path.split('.').forEach(function (k) { o = o == null ? o : o[k]; });
+    if (o == null) { console.warn('ui-text missing: ' + path); return '⟦' + path + '⟧'; }
+    return o;
+  }
+  function H(s, v) { return dirs(esc(fmt(s, v))); }          // template → safe HTML
+  function X(path, v) { return H(L(path), v); }              // string-table key → safe HTML
+  function P(path, v) { return fmt(L(path), v); }            // string-table key → plain text
+  function tipA(text) { return ' data-tip="' + esc(text) + '"'; }
+  function zoneName(id) { return P('zones.' + id); }
+  function statName(st) { return P('stats.' + st); }
+  function cardName(id) { return P('cards.' + id + '.name'); }
+  function eventName(id) { return P('events.' + id); }
+  function lineParts(s) { // "{C2}: text" → speaker + text; "[...]" alone → narration
+    var m = /^\{([A-Z0-9]+)\}: ([\s\S]*)$/.exec(s);
+    return m ? { who: m[1], text: m[2] } : { narr: s };
+  }
+
+  // ---------- art (greybox fallback when a file is missing) ----------
+  var MONO_ONLY = { CARE: 1, INSIGHT: 1, NERVE: 1, bar: 1, action: 1, deck: 1 }; // the artist made these in ink + paper only
+  var ICON_OF_STAT = { INSIGHT: 'INSIGHT', NERVE: 'NERVE', CARE: 'CARE', I: 'INSIGHT', N: 'NERVE', C: 'CARE' };
+  function iconSrc(id, onDark) {
+    var set = (ICON_STYLE === 'mono' || (onDark && MONO_ONLY[id])) ? A.icons.mono : A.icons.colour;
+    return set[id] || A.icons.colour[id] || null;
+  }
+  function icon(id, o) {
+    o = o || {}; var src = iconSrc(id, o.dark), cls = 'ic ' + (o.cls || '');
+    if (src) return '<img class="' + cls + '" src="' + src + '" alt="' + esc(o.alt || id) + '"' + (o.tip ? tipA(o.tip) : '') + '>';
+    return '<span class="' + cls + ' gb"' + (o.tip ? tipA(o.tip) : '') + '>' + esc(String(id).charAt(0)) + '</span>';
+  }
+  function statIcon(st, o) { o = o || {}; var s = ICON_OF_STAT[st]; return icon(s, { dark: o.dark, cls: o.cls, alt: statName(s), tip: o.notip ? null : P('cardUi.iconTip.' + s.charAt(0)) }); }
+  function img(src, cls, alt) { return src ? '<img class="' + cls + '" src="' + src + '" alt="' + esc(alt || '') + '" draggable="false">' : ''; }
+  function box(b) { return 'left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px;'; }
+  function pctBox(b, W, Hh) { return 'left:' + (b.x / W * 100) + '%;top:' + (b.y / Hh * 100) + '%;width:' + (b.w / W * 100) + '%;height:' + (b.h / Hh * 100) + '%;'; }
+  function layoutBox(name) { var b = BL.boxes[name]; return typeof b === 'string' ? A.board.ui[b] : b; }
+  function zoneBox(id) { return (BL.zones === 'manifest' ? A.board.zones : BL.zones)[id]; }
+  function catOf(id) { return L('cards.' + id + '.cat'); }
+
+  // ---------- card component: art, panels, frame, glyph, then live text (artist layer order) ----------
+  function cardHTML(id, o) {
+    o = o || {};
+    var G = U.game, c = (G ? G.card(id) : null) || cfg.deck.concat([cfg.chairCard]).filter(function (x) { return x.id === id; })[0];
+    var cat = catOf(id), B = A.card.boxes, W = A.card.size[0], Hh = A.card.size[1];
+    var frame = A.card.frame[cat] || A.card.frame.neutral, panels = A.card.panels[cat] || A.card.panels.neutral;
+    var art = A.cardArt[id];
+    var pb = function (k) { return pctBox(B[k], W, Hh); };
+    var rollIcons = c.icons.slice(0, A.card.rollIconMax).map(function (ic, i) {
+      var b = { x: B.roll_icons.x, y: B.roll_icons.y + i * (A.card.rollIconSlot + 8), w: A.card.rollIconSlot, h: A.card.rollIconSlot };
+      return '<div class="c-ricon" style="' + pctBox(b, W, Hh) + '">' + statIcon(ic, { dark: true, notip: true }) + '</div>';
+    }).join('');
+    return '<div class="card cat-' + cat + (frame ? '' : ' gbcard') + (o.cls ? ' ' + o.cls : '') + '"' + (o.attrs || '') + ' style="width:' + (o.w || 190) + 'px">' +
+      (art ? '<img class="c-art" style="' + pb('art') + '" src="' + art + '" alt="" draggable="false">' : '<div class="c-art gb" style="' + pb('art') + '">' + esc(cardName(id)) + '</div>') +
+      (panels ? '<img class="c-layer" src="' + panels + '" alt="" draggable="false">' : '<div class="c-layer gbpanels"></div>') +
+      (frame ? '<img class="c-layer" src="' + frame + '" alt="" draggable="false">' : '') +
+      (A.card.glyph[cat] ? '<img class="c-glyph" style="' + pb('category_glyph') + '" src="' + A.card.glyph[cat] + '" alt="" draggable="false">' : '<div class="c-glyph gb" style="' + pb('category_glyph') + '"></div>') +
+      '<div class="c-box c-name" data-box="name" style="' + pb('name') + '"><span>' + esc(cardName(id)) + '</span></div>' +
+      '<div class="c-box c-cat" data-box="category_label" style="' + pb('category_label') + '"><span>' + esc(P('cardCategories.' + cat)) + '</span></div>' +
+      '<div class="c-box c-rlabel" data-box="roll_label" style="' + pb('roll_label') + '"><span>' + X('cardUi.addLabel') + '</span></div>' + rollIcons +
+      '<div class="c-box c-effect" data-box="effect" style="' + pb('effect') + '"><span><b class="c-playlbl">' + X('cardUi.playLabel') + '</b> ' + X('cards.' + id + '.text') + '</span></div>' +
+      '<div class="c-box c-flav" data-box="flavour" style="' + pb('flavour') + '"><span>' + X('cards.' + id + '.flavour') + '</span></div>' +
+      (o.extra || '') + '</div>';
+  }
+  function cardTip(id) { return P('cardUi.tip', { effect: P('cards.' + id + '.text') }); }
+
+  // ---------- Question card (full) ----------
+  function questionCardHTML(qid, o) {
+    o = o || {};
+    var th = ECFG.threads.filter(function (t) { return t.id === qid; })[0], Q = A.questions.layout, W = 750, Hh = 1050;
+    var have = o.have == null ? null : Math.min(o.have, th.cost);
+    var pips = ''; for (var i = 0; i < th.cost; i++) pips += '<span class="qpip' + (have != null && i < have ? ' on' : '') + '">' + icon('progress', { alt: '' }) + '</span>';
+    return '<div class="qcard' + (o.cls ? ' ' + o.cls : '') + (A.questions.bg[qid] ? '' : ' gbq') + '"' + (o.attrs || '') + ' style="width:' + (o.w || 300) + 'px">' +
+      img(A.questions.bg[qid], 'c-layer', '') +
+      '<div class="c-box q-text" data-box="question_text" style="' + pctBox(Q.question_text, W, Hh) + '"><span>' + X('questions.' + qid) + '</span></div>' +
+      '<div class="c-box q-cost" data-box="cost" style="' + pctBox(Q.cost, W, Hh) + '"><span>' +
+        (have != null ? X('hud.questionProgress', { have: have, cost: th.cost }) : X('dawn.cost', { cost: th.cost })) + '<span class="qpips">' + pips + '</span></span></div>' +
+      (o.extra || '') + '</div>';
+  }
+
+  // ---------- stage scaling ----------
+  var SCALE = 1;
+  function fit() {
+    var w = window.innerWidth, h = window.innerHeight;
+    SCALE = Math.min(w / BL.stage.w, h / BL.stage.h);
+    stage.style.transform = 'scale(' + SCALE + ')';
+    stage.style.left = Math.round((w - BL.stage.w * SCALE) / 2) + 'px';
+    stage.style.top = Math.round((h - BL.stage.h * SCALE) / 2) + 'px';
+    var useSmall = A.board.bgSmall && BL.stage.w * SCALE * (window.devicePixelRatio || 1) <= BL.bgSmallBelow;
+    U.bg = (useSmall ? A.board.bgSmall : A.board.bg) || null;
+    Array.prototype.forEach.call(document.querySelectorAll('img.boardbg'), function (i) { if (U.bg && i.getAttribute('src') !== U.bg) i.src = U.bg; });
+    placeCoach();
+  }
+  window.addEventListener('resize', fit);
+  function bgHTML(cls) { return U.bg ? '<img class="boardbg ' + (cls || '') + '" src="' + U.bg + '" alt="" draggable="false">' : '<div class="boardbg gbboard ' + (cls || '') + '"></div>'; }
 
   // ---------- TITLE ----------
   function renderTitle() {
-    U.screen = 'title';
-    var skins = Object.keys(TXT.SKINS).map(function (k) { return '<option value="' + k + '"' + (k === U.skin ? ' selected' : '') + '>' + k + (k === 'neutral' ? ' (CAPS slots)' : ' — ' + TXT.SKINS[k].POV) + '</option>'; }).join('');
-    app.innerHTML =
-      '<div class="panel"><h1>' + T(TXT.title) + '</h1><p class="muted">' + T(TXT.subtitle) + '</p>' +
-      '<p>' + T(TXT.encounterGoal) + ' About 20–30 minutes. Your run stats are saved in this browser — please send them with <b>Stats → Download</b> at the end.</p>' +
-      '<div class="row"><label>Seed <input id="inSeed" size="12" placeholder="random" value="' + (U.seed != null ? U.seed : '') + '"></label>' +
-      '<label>Names <select id="inSkin">' + skins + '</select></label>' +
-      '<label>Tester name (optional) <input id="inTester" size="14" value="' + esc(U.tester) + '"></label></div>' +
-      '<p><button class="primary" id="bStart">Start (with story intro)</button> <button id="bSkip">Skip intro → straight to the encounter</button></p></div>';
+    U.screen = 'title'; closeZoom(); endCoach(true);
+    var skins = Object.keys(TXT.SKINS).map(function (k) { return '<option value="' + k + '"' + (k === U.skin ? ' selected' : '') + '>' + (k === 'neutral' ? esc(P('ui.namesSlots')) : k + ' · ' + esc(TXT.SKINS[k].POV)) + '</option>'; }).join('');
+    stage.innerHTML = bgHTML('dim') +
+      '<div class="title-panel">' +
+        '<h1>' + X('ui.title') + '</h1><div class="sub">' + X('ui.subtitle') + '</div>' +
+        '<p class="blurb">' + X('ui.titleBlurb') + '</p>' +
+        '<div class="form">' +
+          '<label' + tipA(P('ui.seedFieldTip')) + '>' + X('ui.seedLabel') + '<input id="inSeed" value="' + (U.seed != null ? U.seed : '') + '"></label>' +
+          '<label' + tipA(P('ui.namesTip')) + '>' + X('ui.namesLabel') + '<select id="inSkin">' + skins + '</select></label>' +
+          '<label' + tipA(P('ui.testerTip')) + '>' + X('ui.testerLabel') + '<input id="inTester" value="' + esc(U.tester) + '"></label>' +
+          '<label class="chk"' + tipA(P('ui.tutorialFieldTip')) + '><input type="checkbox" id="inTut"' + (U.wantTutorial ? ' checked' : '') + '> ' + X('ui.tutorialLabel') + '</label>' +
+        '</div>' +
+        '<div class="btns"><button class="primary big" id="bStart"' + tipA(P('ui.startTip')) + '>' + X('ui.start') + '</button>' +
+        '<button id="bSkip"' + tipA(P('ui.skipIntroTip')) + '>' + X('ui.skipIntro') + '</button></div>' +
+        '<div class="buildtag">' + X('ui.buildTag') + ' · ' + esc(cfg.version) + '</div>' +
+      '</div>';
     on('bStart', function () { readTitle(); startIntro(); });
     on('bSkip', function () { readTitle(); renderQuickChoices(); });
     renderDebug();
@@ -54,14 +177,20 @@
     U.seed = s ? (parseInt(s, 10) >>> 0) : newSeed();
     U.skin = document.getElementById('inSkin').value;
     U.tester = document.getElementById('inTester').value.trim();
+    U.wantTutorial = document.getElementById('inTut').checked;
     U.choices = { bond: null, key: null, visited: [] };
     U.tStart = Date.now(); U.saved = false; U.runId = Date.now().toString(36) + '-' + U.seed;
-    document.getElementById('seedLabel').textContent = 'seed ' + U.seed;
   }
+  function newSeed() { return Math.floor(Math.random() * 1e9); }
+  function on(id, fn) { var e = document.getElementById(id); if (e) e.onclick = fn; }
+  function all(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
+
   function renderQuickChoices() {
     U.screen = 'quick';
-    function opts(key) { return TXT.choices[key].options.map(function (o) { return '<label><input type="radio" name="' + key + '" value="' + o.value + '"' + (o === TXT.choices[key].options[0] ? ' checked' : '') + '> ' + T(o.label) + '</label><br>'; }).join(''); }
-    app.innerHTML = '<div class="panel"><h2>Quick setup (skipping the VN)</h2><p><b>' + T(TXT.choices.bond.prompt) + '</b><br>' + opts('bond') + '</p><p><b>' + T(TXT.choices.key.prompt) + '</b><br>' + opts('key') + '</p><button class="primary" id="bGo">Begin the night</button></div>';
+    function opts(key) { return TXT.choices[key].options.map(function (o, i) { return '<label class="opt"><input type="radio" name="' + key + '" value="' + o.value + '"' + (i === 0 ? ' checked' : '') + '> ' + H(o.label) + '</label>'; }).join(''); }
+    stage.innerHTML = bgHTML('dim') + '<div class="title-panel"><h2>' + X('ui.quickSetup') + '</h2>' +
+      '<p><b>' + H(TXT.choices.bond.prompt) + '</b></p>' + opts('bond') + '<p><b>' + H(TXT.choices.key.prompt) + '</b></p>' + opts('key') +
+      '<div class="btns"><button class="primary big" id="bGo"' + tipA(P('ui.beginNightTip')) + '>' + X('ui.beginNight') + '</button></div></div>';
     on('bGo', function () {
       U.choices.bond = document.querySelector('input[name=bond]:checked').value;
       U.choices.key = document.querySelector('input[name=key]:checked').value;
@@ -70,348 +199,752 @@
     });
   }
 
-  // ---------- VN INTRO ----------
+  // ---------- VN player (intro and outro) ----------
+  var CAST_ORDER = ['POV', 'C1', 'C2', 'HOST'];
+  function sceneCast(lines) { var s = {}; lines.forEach(function (l) { if (l.who) s[l.who] = 1; }); return CAST_ORDER.filter(function (k) { return s[k]; }); }
   function startIntro() {
-    U.screen = 'vn'; U.steps = []; U.stepIdx = 0;
+    U.screen = 'vn'; U.revealed = [];
+    var steps = [];
     TXT.intro.forEach(function (sc) {
-      if (sc.spots) { U.steps.push({ type: 'spots', scene: sc.scene }); return; }
-      (sc.lines || []).forEach(function (l) { U.steps.push({ type: 'line', scene: sc.scene, line: l }); });
-      (sc.choices || []).forEach(function (c) { U.steps.push({ type: 'choice', scene: sc.scene, key: c }); });
+      if (sc.spots) { steps.push({ type: 'spots', scene: sc.scene }); return; }
+      var cast = sceneCast(sc.lines || []);
+      (sc.lines || []).forEach(function (l) { steps.push({ type: 'line', scene: sc.scene, line: l, cast: cast }); });
+      (sc.choices || []).forEach(function (c) { steps.push({ type: 'choice', scene: sc.scene, key: c, cast: cast }); });
     });
-    U.steps.push({ type: 'toEncounter' });
+    U.vn = { steps: steps, idx: 0, done: startEncounter };
     renderVN();
   }
   function expandSpots(scene, ids) {
     var add = [];
-    ids.forEach(function (id) { var sp = TXT.spots[id]; sp.lines.forEach(function (l) { add.push({ type: 'line', scene: scene + ' — ' + t(sp.label), line: l }); }); });
-    U.steps.splice.apply(U.steps, [U.stepIdx, 1].concat(add));
+    ids.forEach(function (id) { var sp = TXT.spots[id], cast = sceneCast(sp.lines); sp.lines.forEach(function (l) { add.push({ type: 'line', scene: scene + ' · ' + fmt(sp.label), line: l, cast: cast }); }); });
+    U.vn.steps.splice.apply(U.vn.steps, [U.vn.idx, 1].concat(add));
   }
-  // [Bracketed] text = stage direction, rendered in italics.
-  function dirs(html) { return html.replace(/\[([^\]]*)\]/g, '<em class="dir">$1</em>'); }
-  function lineHTML(l) {
-    if (l.narr) return '<div class="narr">' + dirs(T(l.narr)) + '</div>';
-    return '<div class="who">' + esc(Skin.speaker(l.who, names())) + '</div><div>' + dirs(T(l.text)) + '</div>';
+  function portrait(who, active, speaking) {
+    var src = A.portraits[who];
+    var nm = Skin.speaker(who, names());
+    return '<div class="vn-char' + (speaking ? ' speaking' : '') + (active ? '' : ' dim') + '" data-who="' + who + '">' +
+      (src ? '<img src="' + src + '" alt="" draggable="false">' : '<div class="silhouette"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="20"/><path d="M12 100 C14 70 32 60 50 60 C68 60 86 70 88 100 Z"/></svg></div>') +
+      '<div class="vn-plate">' + esc(nm) + '</div></div>';
   }
   function renderVN() {
-    var st = U.steps[U.stepIdx];
-    if (!st) return;
-    if (st.type === 'toEncounter') { startEncounter(); return; }
+    var V = U.vn, st = V.steps[V.idx];
+    if (!st) { V.done(); return; }
     if (st.type === 'spots') {
-      var all = Object.keys(TXT.spots);
-      if (!cfg.fasterVariant) { U.choices.visited = all; expandSpots(st.scene, all); return renderVN(); }
-      // faster variant: choose N of 3
-      app.innerHTML = '<div class="vn"><div class="scene">' + T(st.scene) + '</div><div class="box"><div>Visit ' + cfg.beat3SpotsToVisit + ' of ' + all.length + ' spots. (The skipped spot\'s card is removed from the deck.)</div><div class="choices">' +
-        all.map(function (id) { return '<label><input type="checkbox" class="spot" value="' + id + '"> ' + T(TXT.spots[id].label) + '</label><br>'; }).join('') +
-        '</div><div class="nav"><button class="primary" id="bSpots">Go</button></div></div></div>';
+      var ids = Object.keys(TXT.spots);
+      if (!cfg.fasterVariant) { U.choices.visited = ids; expandSpots(st.scene, ids); return renderVN(); }
+      // faster variant: pick N of 3 (rare; plain list)
+      stage.innerHTML = bgHTML('dim vnbg') + '<div class="vn-box"><div class="vn-name">' + X('ui.choice') + '</div><div class="vn-text">' +
+        ids.map(function (id) { return '<label class="opt"><input type="checkbox" class="spot" value="' + id + '"> ' + H(TXT.spots[id].label) + '</label>'; }).join('') +
+        '</div><div class="vn-nav"><button class="primary" id="bSpots">' + X('ui.vnNext') + '</button></div></div>';
       on('bSpots', function () {
-        var ids = Array.prototype.map.call(document.querySelectorAll('.spot:checked'), function (x) { return x.value; });
-        if (ids.length !== cfg.beat3SpotsToVisit) { alert('Pick exactly ' + cfg.beat3SpotsToVisit + '.'); return; }
-        U.choices.visited = ids; expandSpots(st.scene, ids); renderVN();
+        var pick = Array.prototype.map.call(document.querySelectorAll('.spot:checked'), function (x) { return x.value; });
+        if (pick.length !== cfg.beat3SpotsToVisit) return;
+        U.choices.visited = pick; expandSpots(st.scene, pick); renderVN();
       });
       return;
     }
+    if (st.line && st.line.question && U.revealed.indexOf(st.line.question) < 0) U.revealed.push(st.line.question);
+    var who = st.line && st.line.who, cast = st.cast || [];
+    var chars = '<div class="vn-cast">' + cast.map(function (k) { return portrait(k, !who || k === who, k === who); }).join('') + '</div>';
+    var qrow = U.revealed.length && U.screen === 'vn' ? '<div class="vn-questions">' + U.revealed.map(function (q) {
+      return questionCardHTML(q, { w: 230, cls: st.line && st.line.question === q ? 'slidein' : '' });
+    }).join('') + '</div>' : '';
+    var head = '<div class="vn-scene">' + H(st.scene) + '</div>' + (st.warn ? '<div class="vn-warn">' + X('ui.placeholderScene') + '</div>' : '');
     if (st.type === 'choice') {
       var ch = TXT.choices[st.key];
-      app.innerHTML = '<div class="vn"><div class="scene">' + T(st.scene) + '</div><div class="box"><div class="who">Choice</div><div>' + T(ch.prompt) + '</div><div class="choices">' +
-        ch.options.map(function (o, i) { return '<button data-i="' + i + '">' + T(o.label) + '</button>'; }).join('') + '</div></div></div>';
-      Array.prototype.forEach.call(app.querySelectorAll('.choices button'), function (b) {
+      stage.innerHTML = bgHTML('dim vnbg') + head + chars + qrow + '<div class="vn-box"><div class="vn-name">' + X('ui.choice') + '</div><div class="vn-text">' + H(ch.prompt) + '</div>' +
+        '<div class="vn-choices">' + ch.options.map(function (o, i) { return '<button data-i="' + i + '">' + H(o.label) + '</button>'; }).join('') + '</div></div>';
+      all('.vn-choices button', function (b) {
         b.onclick = function () {
           var o = ch.options[+b.dataset.i]; U.choices[st.key] = o.value;
-          if (o.after) U.steps.splice(U.stepIdx + 1, 0, { type: 'line', scene: st.scene, line: { narr: o.after } });
-          U.stepIdx++; renderVN();
+          if (o.after) V.steps.splice(V.idx + 1, 0, { type: 'line', scene: st.scene, line: { narr: o.after }, cast: st.cast });
+          V.idx++; renderVN();
         };
       });
       return;
     }
-    app.innerHTML = '<div class="vn"><div class="scene">' + T(st.scene) + '</div><div class="box">' + lineHTML(st.line) +
-      '<div class="nav"><button id="bSkipVN">Skip to choices</button><button class="primary" id="bNext">Next ▸</button></div></div></div>';
-    on('bNext', function () { U.stepIdx++; renderVN(); });
+    var l = st.line;
+    stage.innerHTML = bgHTML('dim vnbg') + head + chars + qrow +
+      '<div class="vn-box" id="vnBox">' + (l.narr ? '<div class="vn-text narr">' + H(l.narr) + '</div>'
+        : '<div class="vn-name">' + esc(Skin.speaker(l.who, names())) + '</div><div class="vn-text">' + H(l.text) + '</div>') +
+      '<div class="vn-nav"><button id="bSkipVN"' + tipA(P('ui.vnSkipTip')) + '>' + X('ui.vnSkip') + '</button><button class="primary" id="bNext"' + tipA(P('ui.vnNextTip')) + '>' + X('ui.vnNext') + ' ▸</button></div></div>';
+    on('bNext', vnNext);
+    document.getElementById('vnBox').onclick = function (e) { if (e.target.tagName !== 'BUTTON') vnNext(); };
     on('bSkipVN', function () {
-      // jump to the next choice (or the encounter), still expanding spots
-      for (var i = U.stepIdx + 1; i < U.steps.length; i++) { var ty = U.steps[i].type; if (ty === 'choice' || ty === 'toEncounter' || ty === 'spots') { U.stepIdx = i; break; } }
-      renderVN();
+      for (var i = V.idx + 1; i < V.steps.length; i++) {
+        var s2 = V.steps[i]; if (s2.line && s2.line.question && U.revealed.indexOf(s2.line.question) < 0) U.revealed.push(s2.line.question);
+        if (s2.type === 'choice' || s2.type === 'spots' || s2.stop) { V.idx = i; return renderVN(); }
+      }
+      V.idx = V.steps.length; renderVN();
     });
-    document.getElementById('bNext').focus();
+    renderDebug();
   }
+  function vnNext() { U.vn.idx++; renderVN(); }
 
   // ---------- ENCOUNTER ----------
-  function startEncounter() {
-    U.game = Engine.createGame(cfg, { seed: U.seed, bond: U.choices.bond || 'C1', key: U.choices.key || 'SHARED', visited: U.choices.visited.length ? U.choices.visited : ['3a', '3b', '3c'] });
-    U.tEncounter = Date.now(); U.test = null; U.alloc = []; U.msg = null; U.lastResult = null; U.saved = false;
-    window.__game = U.game; // handy for playtest debugging in the console
+  function startEncounter(opt) {
+    opt = opt || {};
+    var tutorial = opt.tutorial != null ? opt.tutorial : U.wantTutorial;
+    U.game = Engine.createGame(cfg, { seed: U.seed, bond: U.choices.bond || 'C1', key: U.choices.key || 'SHARED', visited: U.choices.visited.length ? U.choices.visited : ['3a', '3b', '3c'], tutorial: tutorial });
+    if (!U.tStart) U.tStart = Date.now();
+    if (!U.runId) U.runId = Date.now().toString(36) + '-' + U.game.state.seed;
+    U.tEncounter = Date.now(); U.tray = null; U.alloc = []; U.saved = false; U.moveMode = false; U.lastRound = 0; U.feedSeen = 0; U.outroSteps = null;
+    U.tutInfo = { used: tutorial, skippedAt: null };
+    window.__game = U.game; // console debugging
     U.screen = 'encounter';
+    U.tut = tutorial ? { i: 0 } : null;
     renderEncounter();
   }
+  function G_() { return U.game; }
+  function canAct() { var S = U.game.state; return S.phase === 'actions' && S.actionsLeft > 0; }
+  function zoneIdx(id) { for (var i = 0; i < ECFG.zones.length; i++) if (ECFG.zones[i].id === id) return i; return -1; }
+  function band(p) { for (var i = 0; i < TXT.pressureBands.length; i++) { var b = TXT.pressureBands[i]; if (p >= b.min && p <= b.max) return fmt(b.text); } return ''; }
+  function evDef(id) { return U.game.cfg.events.filter(function (e) { return e.id === id; })[0]; }
+  function oddsOf(stat, need, commits, helps) {
+    var G = U.game, pv = G.previewTest(stat, need, commits || [], helps || []);
+    return { pv: pv, o: Odds.testOdds(G.cfg, pv.preDraw, need) };
+  }
+  function bestCommits(stat, excludeId) {
+    var G = U.game, ic = Engine.ICON_OF_STAT[stat];
+    return G.state.hand.filter(function (id) { return id !== excludeId && G.card(id).icons.indexOf(ic) >= 0; });
+  }
+  function searchNeed(zi) { var G = U.game; return Math.max(0, G.cfg.zones[zi].investigateDifficulty - G.state.torch); }
 
-  function band(p) { for (var i = 0; i < TXT.pressureBands.length; i++) { var b = TXT.pressureBands[i]; if (p >= b.min && p <= b.max) return t(b.text); } return ''; }
+  /** action bar entries, data-driven from cfg.uiActions (after rule flags) */
+  function actionDefs() {
+    var G = U.game, S = G.state, c = G.cfg, a = canAct(), out = [];
+    c.uiActions.forEach(function (id) {
+      var d = { id: id, label: P('actions.' + id + '.label'), ok: a, why: a ? '' : (S.phase === 'discard' ? P('reasons.discardFirst', { limit: c.handLimit }) : P('reasons.noActions')) };
+      if (id === 'move') {
+        d.tip = P('actions.move.tip') + (S.pov === c.zones.length - 2 ? P('actions.moveExposure') : '');
+        d.run = function () { U.moveMode = !U.moveMode; renderEncounter(); };
+      } else if (id === 'investigate') {
+        var need = searchNeed(S.pov), z = c.zones[S.pov], r0 = oddsOf('INSIGHT', need), rb = oddsOf('INSIGHT', need, bestCommits('INSIGHT'));
+        d.tip = P('actions.investigate.tip', { zone: zoneName(z.id), need: need, pct: Odds.pct(r0.o.p), gain: z.progress }) + (rb.o.p > r0.o.p ? P('actions.withBest', { pct: Odds.pct(rb.o.p) }) : '') + P('actions.omenNote');
+        d.run = function () { openTray({ kind: 'investigate', stat: 'INSIGHT', zone: S.pov }); };
+      } else if (id === 'steady') {
+        var r1 = oddsOf('CARE', c.steadyDifficulty), r2 = oddsOf('CARE', c.steadyDifficulty, bestCommits('CARE'));
+        d.tip = P('actions.steady.tip', { need: c.steadyDifficulty, pct: Odds.pct(r1.o.p) }) + (r2.o.p > r1.o.p ? P('actions.withBest', { pct: Odds.pct(r2.o.p) }) : '') + P('actions.omenNote');
+        d.run = function () { openTray({ kind: 'steady', stat: 'CARE' }); };
+      } else if (id === 'play') {
+        d.tip = P('actions.play.tip');
+        d.run = function () { all('.hcard.playable', function (e) { e.classList.remove('flash'); void e.offsetWidth; e.classList.add('flash'); }); };
+      } else if (id === 'holdDoor') {
+        var r3 = oddsOf('NERVE', c.holdDoorDifficulty);
+        if (a && S.pov !== zoneIdx(c.holdDoorZone)) { d.ok = false; d.why = P('reasons.houseOnly'); }
+        else if (a && !c.barsStack && S.bars) { d.ok = false; d.why = P('reasons.barDown'); }
+        d.tip = P('actions.holdDoor.tip', { need: c.holdDoorDifficulty, pct: Odds.pct(r3.o.p) });
+        d.run = function () { openTray({ kind: 'holdDoor', stat: 'NERVE' }); };
+      } else if (id === 'draw') {
+        if (a && !S.deck.length) { d.ok = false; d.why = P('reasons.deckEmpty'); }
+        d.tip = P('actions.draw.tip', { left: S.deck.length });
+        d.run = function () { act(G.drawAction()); };
+      } else return;
+      out.push(d);
+    });
+    return out;
+  }
+  function endTurnTip() {
+    var G = U.game, S = G.state, c = G.cfg, last = c.zones.length - 1, n = 0;
+    if (S.pov === last) n += c.exposurePOV; if (S.c1 === last) n += c.exposureC1;
+    return P(c.rules && c.rules.endTurnButton ? 'actions.endTurn.tip' : 'actions.endRound.tip') + (n ? P('actions.endExposure', { n: n }) : '') +
+      (S.round >= c.rounds ? P('actions.endDawn') : S.silence ? P('actions.endNoDraw') : P('actions.endDraw'));
+  }
+
+  function tokenPos(who) {
+    var G = U.game, S = G.state, zid = G.cfg.zones[who === 'POV' ? S.pov : who === 'C1' ? S.c1 : 0].id;
+    var an = BL.tokens[who][zid] || BL.tokens[who].house, zb = zoneBox(zid);
+    return { x: zb.x + an[0] * zb.w, y: zb.y + an[1] * zb.h, zone: zid };
+  }
+  function tokenHTML(who) {
+    var p = tokenPos(who), s = BL.tokenSize, src = A.tokens[who];
+    return '<div class="token tok-' + who + '" id="tok-' + who + '" style="left:' + (p.x - s / 2) + 'px;top:' + (p.y - s / 2) + 'px;width:' + s + 'px;height:' + s + 'px"' + tipA(P('board.token' + who + 'Tip')) + '>' +
+      (src ? '<img src="' + src + '" alt="" draggable="false">' : '<div class="gbtok">' + esc(Skin.speaker(who, names()).charAt(0)) + '</div>') +
+      '<div class="tok-name">' + esc(Skin.speaker(who, names())) + '</div></div>';
+  }
 
   function renderEncounter() {
-    var G = U.game, S = G.state;
-    if (S.phase === 'allocate') return renderAllocate();
-    if (S.phase === 'done') return renderOutro();
-    var n = names();
-    var track = ''; for (var p = 0; p <= cfg.pressureMax; p++) track += '<span class="' + (p === S.pressure ? 'on ' : '') + (p === cfg.pressureMax ? 'max' : '') + '">' + p + '</span>';
-    var ev = S.lastEvent, evDef = cfg.events.filter(function (e) { return e.id === ev.id; })[0];
-    var zones = cfg.zones.map(function (z, i) {
-      var toks = '';
-      if (S.pov === i) toks += '<span class="tok pov">' + esc(n.POV) + '</span>';
-      if (S.c1 === i) toks += '<span class="tok c1">' + esc(n.C1) + '</span>';
-      if (i === 0) toks += '<span class="tok">' + esc(n.C2) + '</span>';
-      return '<div class="zone' + (S.pov === i ? ' here' : '') + '"><b>' + z.name + '</b> <span class="muted">Investigate ' + z.investigateDifficulty + ' → +' + z.progress + ' progress' + (i === cfg.zones.length - 1 ? ' · end round here: pressure +1' : '') + '</span><div>' + toks + '</div></div>';
+    var G = U.game, S = G.state, c = G.cfg;
+    if (S.phase === 'allocate') { closeZoom(); return renderDawn(); }
+    if (S.phase === 'done') { closeZoom(); return startOutro(); }
+    var before = {}; ['POV', 'C1', 'C2'].forEach(function (w) { var e = document.getElementById('tok-' + w); if (e) before[w] = e.getBoundingClientRect(); });
+    var a = canAct(), last = c.zones.length - 1;
+    // zones
+    var zones = c.zones.map(function (z, i) {
+      var zb = zoneBox(z.id), canMove = a && Math.abs(i - S.pov) === 1;
+      var need = Math.max(0, z.investigateDifficulty - S.torch);
+      return '<div class="zone' + (i === S.pov ? ' here' : '') + (canMove ? ' movable' : '') + (canMove && U.moveMode ? ' moveHint' : '') + '" id="zone-' + z.id + '" data-zone="' + i + '" data-ctl="zone-' + z.id + '" style="' + box(zb) + '"' +
+        tipA(P('board.zoneTip.' + z.id, { need: need, gain: z.progress }) + (canMove ? ' ' + P('board.moveHere') + '.' : '')) + '>' +
+        (canMove ? '<div class="moveTag">' + X('board.moveHere') + ' ▸</div>' : '') +
+        '<div class="zstrip" style="height:' + BL.zoneStripH + 'px"><span class="zname">' + esc(zoneName(z.id)) + '</span><span class="zbadge">' + statIcon('INSIGHT', { dark: true, notip: true }) + X('board.zoneBadge', { need: need, gain: z.progress }) + '</span></div></div>';
     }).join('');
-    var threads = cfg.threads.map(function (th) { return '<div class="thread"><b>' + th.id + ' · ' + th.name + '</b> — cost ' + th.cost + '<br><span class="muted">' + T(TXT.threads[th.id]) + '</span></div>'; }).join('');
-    var helps = ['c1', 'c2'].map(function (w) {
-      var h = cfg.helps[w];
-      return '<div>' + esc(w === 'c1' ? n.C1 : n.C2) + ' Help: <b>' + (S.helps[w].used ? 'used' : 'ready') + '</b> (+' + G.helpBonus(w) + ' to ' + h.stats.join('/') + (h.onlyInHouse ? ', only while she is in the House' : '') + ')</div>';
+    var bar = S.bars ? '<div class="door" id="door" style="' + box(layoutBox('barOnDoor')) + '"' + tipA(P('board.barTip')) + '>' + icon('barOnDoor', { alt: P('board.bar') }) + '</div>' : '';
+    // top band
+    var pips = ''; for (var k = 0; k < c.actionsPerRound; k++) pips += '<span class="apip' + (k < S.actionsLeft ? ' on' : '') + '">' + icon('action', { dark: true, alt: '' }) + '</span>';
+    var endLbl = P(c.rules && c.rules.endTurnButton ? 'actions.endTurn.label' : 'actions.endRound.label');
+    var turn = '<div class="hud turn" id="turnBox" style="' + box(layoutBox('turn')) + '"><div class="aleft"' + tipA(P('hud.actionsLeftTip', { n: S.actionsLeft })) + '><span>' + X('hud.actionsLeft', { n: S.actionsLeft }) + '</span><span class="apips">' + pips + '</span></div>' +
+      '<button id="act-end" data-ctl="act-end" class="primary endturn' + (S.actionsLeft === 0 && S.phase === 'actions' ? ' nudge' : '') + '"' + (S.phase === 'actions' ? '' : ' disabled') + tipA(endTurnTip()) + '>' + esc(endLbl) + ' ▸</button></div>';
+    var goal = '<div class="hud goal" id="goalBanner" style="' + box(layoutBox('goalBanner')) + '"' + tipA(P('hud.goalTip')) + '><span>' + X('hud.goal') + '</span>' +
+      '<button id="btnMenu" class="menuBtn"' + tipA(P('ui.menuTip')) + '>☰ ' + X('ui.menu') + '</button></div>';
+    var moons = ''; for (var r = 1; r <= c.rounds; r++) moons += '<span class="moon' + (r === S.round ? ' now' : r < S.round ? ' past' : '') + '"' + tipA(P('hud.nightStepTip', { n: r })) + '>' + img(A.moons[Math.min(r, A.moons.length) - 1], 'ic', '') + (A.moons[r - 1] ? '' : '<span class="gb">' + r + '</span>') + '</span>';
+    moons += '<span class="moon dawn"' + tipA(P('hud.dawnStepTip')) + '>' + (A.dawn ? img(A.dawn, 'ic', '') : '<span class="gb">☀</span>') + '</span>';
+    var night = '<div class="hud nightc" id="nightCounter" style="' + box(layoutBox('nightCounter')) + '"' + tipA(P('hud.nightTip', { n: S.round, total: c.rounds })) + '><div class="nlabel">' + X('hud.night', { n: S.round, total: c.rounds }) + '</div><div class="moons">' + moons + '</div></div>';
+    // dread track
+    var db = layoutBox('dread'), k2 = db.h / A.dread.size[1], tw = A.dread.size[0] * k2;
+    var steps = A.dread.steps.map(function (s) {
+      return '<div class="dstep' + (s.step === S.pressure ? ' now' : '') + (s.step === c.pressureMax ? ' brk' : '') + '" style="left:' + s.x * k2 + 'px;top:' + s.y * k2 + 'px;width:' + s.w * k2 + 'px;height:' + s.h * k2 + 'px"' + tipA(s.step === c.pressureMax ? P('hud.dreadBreakTip', { max: c.pressureMax }) : P('hud.dreadPipTip', { n: s.step })) + '>' +
+        (A.dread.track ? '' : '<div class="gbstep" style="opacity:' + (0.25 + s.step / 8) + '"></div>') + '<span class="dnum">' + s.step + '</span>' + (s.step === S.pressure ? '<span class="dmark">' + icon('pressure', { alt: '' }) + '</span>' : '') + '</div>';
     }).join('');
+    var lb = A.dread.label;
+    var dread = '<div class="hud dread" id="dread" style="' + box(db) + '"' + tipA(P('hud.dreadTip', { n: S.pressure, max: c.pressureMax }) + ' ' + band(S.pressure)) + '>' +
+      '<div class="dtrack" style="width:' + tw + 'px;height:' + db.h + 'px">' + (A.dread.track ? '<img src="' + A.dread.track + '" alt="" draggable="false">' : '') + steps +
+      (lb ? '<div class="dlabel" data-box="dread.label_box" style="left:' + lb.x * k2 + 'px;top:' + lb.y * k2 + 'px;width:' + lb.w * k2 + 'px;height:' + lb.h * k2 + 'px"><span>' + X('hud.dreadTitle', { n: S.pressure, max: c.pressureMax }) + ' · ' + X('hud.dreadLabel', { max: c.pressureMax }) + '</span></div>' : '') + '</div></div>';
+    // questions + clues
+    var qb = layoutBox('questions');
+    var qs2 = '<div class="hud questions" id="questions" style="' + box(qb) + '">' + c.threads.map(function (th) {
+      var have = Math.min(S.progress, th.cost), qp = ''; for (var i = 0; i < th.cost; i++) qp += '<span class="qpip' + (i < have ? ' on' : '') + '"></span>';
+      return '<div class="qchip" id="q-' + th.id + '" data-q="' + th.id + '"' + tipA(P('hud.questionTip', { cost: th.cost })) + '>' +
+        (A.questions.bg[th.id] ? '<img class="qbg" src="' + A.questions.bg[th.id] + '" alt="" draggable="false">' : '') +
+        '<div class="qicon">' + (A.questions.icon[th.id] ? '<img src="' + A.questions.icon[th.id] + '" alt="">' : '<span class="gb">?</span>') + '</div>' +
+        '<div class="qtxt"><div class="qs">' + X('questions.' + th.id) + '</div><div class="qcost">' + X('hud.questionProgress', { have: have, cost: th.cost }) + ' <span class="qpips">' + qp + '</span></div></div></div>';
+    }).join('') + '</div>';
+    var clues = '<div class="hud clues" id="clues" style="' + box(layoutBox('clues')) + '"' + tipA(P('hud.cluesTip', { n: S.progress })) + '>' + icon('progress', { alt: '' }) + '<span class="cn">' + S.progress + '</span><span class="cl">' + esc(cap(term('TERM_CLUES'))) + '</span></div>';
+    // bottom: deck, actions, hand, helps, event
+    var deck = '<div class="hud deck" id="deckPile" style="' + box(layoutBox('deck')) + '"' + tipA(P('hud.deckTip', { n: S.deck.length }) + ' ' + P('hud.discardTip', { n: S.discard.length })) + '>' +
+      '<div class="pile' + (S.deck.length ? '' : ' empty') + '">' + icon('deck', { dark: true, alt: '' }) + '<span class="pn">' + S.deck.length + '</span></div><div class="dlbl">' + X('hud.deck', { n: S.deck.length }) + '<br>' + X('hud.discard', { n: S.discard.length }) + '</div></div>';
+    var acts = '<div class="hud actions" id="actionsBox" style="' + box(layoutBox('actions')) + '">' + actionDefs().map(function (d) {
+      return '<button id="act-' + d.id + '" data-ctl="act-' + d.id + '" class="act' + (d.id === 'move' && U.moveMode ? ' on' : '') + '"' + (d.ok ? '' : ' disabled') + tipA(d.ok ? d.tip : d.why + ' ' + d.tip) + '>' + esc(d.label) + '</button>';
+    }).join('') + '</div>';
+    var hb = layoutBox('hand'), n = S.hand.length, cw = BL.handCard.w, ch = cw * A.card.size[1] / A.card.size[0];
+    var step = n > 1 ? Math.min(cw + 12, (hb.w - cw) / (n - 1)) : 0, x0 = hb.x + (hb.w - (cw + step * (n - 1))) / 2;
     var inDiscard = S.phase === 'discard';
-    var hand = S.hand.map(function (id) {
-      var c = G.card(id), can = G.canPlay(id);
-      var btn = inDiscard ? '<button data-discard="' + id + '">Discard</button>'
-        : '<button data-play="' + id + '"' + (can.ok ? '' : ' disabled title="' + esc(can.why) + '"') + '>Play (1 action)</button>' + (can.ok || can.why === 'no action' ? '' : '<div class="muted">' + esc(can.why) + '</div>');
-      return '<div class="card"><div class="nm">' + T(c.name) + '</div><div class="ic">' + icons(c.icons) + '</div><div class="fx">' + T(c.text) + '</div><div class="fl">' + T(c.flavour) + '</div>' + btn + '</div>';
-    }).join('') || '<span class="muted">No cards in hand.</span>';
-    var a = S.phase === 'actions' && S.actionsLeft > 0;
-    var inHouse = S.pov === zoneIdx(cfg.holdDoorZone);
-    var moves = '';
-    if (S.pov > 0) moves += '<button id="aIn"' + (a ? '' : ' disabled') + '>Move → ' + cfg.zones[S.pov - 1].name + '</button>';
-    if (S.pov < cfg.zones.length - 1) moves += '<button id="aOut"' + (a ? '' : ' disabled') + '>Move → ' + cfg.zones[S.pov + 1].name + '</button>';
+    var hand = S.hand.map(function (id, i) {
+      var can = G.canPlay(id), playable = can.ok && !U.tray;
+      var addable = U.tray && !U.tray.result && U.tray.cardId !== id && G.card(id).icons.indexOf(Engine.ICON_OF_STAT[U.tray.stat]) >= 0;
+      return '<div class="hcard' + (playable ? ' playable' : '') + (addable ? ' addable' : '') + (U.tray && U.tray.commits.indexOf(id) >= 0 ? ' added' : '') + '" id="card-' + id + '" data-card="' + id + '" data-ctl="card-' + id + '" draggable="' + (playable ? 'true' : 'false') + '" style="left:' + (x0 + step * i) + 'px;top:' + (BL.stage.h - ch - 10) + 'px;width:' + cw + 'px;height:' + ch + 'px;z-index:' + (10 + i) + '">' +
+        cardHTML(id, { w: cw, cls: 'compact' }) +
+        (inDiscard ? '<button class="discardBtn" data-discard="' + id + '"' + tipA(P('cardUi.discardTip', { limit: c.handLimit })) + '>' + X('cardUi.discard') + '</button>' : '') + '</div>';
+    }).join('');
+    var handHead = inDiscard ? '<div class="handHead warn" style="left:' + hb.x + 'px;top:' + (hb.y - 210) + 'px;width:' + hb.w + 'px">' + X('cardUi.discardPrompt', { limit: c.handLimit }) + '</div>' : '';
+    var helps = '<div class="hud helps" id="helps" style="' + box(layoutBox('helps')) + '">' + ['c1', 'c2'].map(function (w) {
+      var used = S.helps[w].used, bonus = G.helpBonus(w), close = bonus === c.helpBonusBonded;
+      var tip = P(w === 'c1' ? 'hud.helpTipC1' : 'hud.helpTipC2', { bonus: bonus, close: close ? P('hud.helpCloseNote', { bonus: bonus }) : '' });
+      return '<div class="help' + (used ? ' used' : '') + '" id="help-' + w + '"' + tipA(tip) + '>' + (A.helps[w] ? '<img src="' + A.helps[w] + '" alt="" draggable="false">' : '<div class="gbhelp">' + esc(Skin.speaker(w.toUpperCase(), names())) + '</div>') +
+        '<div class="hslot" data-box="help.text"><b>+' + bonus + '</b> ' + X(used ? 'hud.helpUsed' : 'hud.helpReady') + '</div></div>';
+    }).join('') + '</div>';
+    var ev = S.lastEvent, evb = layoutBox('eventCard');
+    var evHTML = '<div class="hud evcard' + (ev.cancelled ? ' cancelled' : '') + '" id="nightEvent" style="' + box(evb) + '"' + tipA(P('hud.eventTip', { event: eventName(ev.id), effect: ev.cancelled ? P('hud.eventCancelled') : P('eventEffects.' + ev.id) }) + ' ' + fmt(TXT.events[ev.id] || '')) + '>' +
+      '<div class="evn">' + esc(eventName(ev.id)) + '</div><div class="eve">' + (ev.cancelled ? X('hud.eventCancelled') : X('eventEffects.' + ev.id)) + '</div>' + (ev.cancelled ? icon('barOnDoor', { cls: 'evbar', alt: '' }) : '') + '</div>';
+    var feedAll = S.feed.map(feedText);
+    var logHTML = '<div class="hud evlog" id="eventLog" style="' + box(layoutBox('eventLog')) + '"' + tipA(P('hud.logTitle') + ': ' + (feedAll.slice(-8).reverse().join(' · ') || '—')) + '><span>' + esc(feedAll[feedAll.length - 1] || '') + '</span></div>';
+    // night 2 hint (Clarity Pass 4.4)
+    var hint = '';
+    if (U.hints && !U.tut && S.round === 2 && S.phase === 'actions') {
+      var ht = S.c1 > 0 ? P('hints.c1Out', { zone: zoneName(c.zones[S.c1].id) }) : S.pressure >= 3 ? P('hints.highDread', { n: S.pressure }) : P('hints.searchOut');
+      hint = '<div class="hint" id="hint" style="' + box(layoutBox('hint')) + '"><span>' + esc(ht) + '</span><button id="hintOff"' + tipA(P('ui.hintsTip')) + '>×</button></div>';
+    }
+    stage.innerHTML = bgHTML('board') + zones + bar + tokenHTML('C2') + tokenHTML('C1') + tokenHTML('POV') +
+      turn + goal + night + dread + qs2 + clues + deck + acts + helps + evHTML + logHTML + hint +
+      '<div class="dropPlay" id="dropPlay" style="' + box({ x: zoneBox('house').x, y: zoneBox('house').y, w: zoneBox('treeline').x + zoneBox('treeline').w - zoneBox('house').x, h: zoneBox('house').h }) + '"><span>' + X('board.playZone') + '</span></div>' +
+      handHead + hand + (U.tray ? trayHTML() : '') + layoutOutlines();
+    wireEncounter();
+    // animate token moves (FLIP)
+    ['POV', 'C1'].forEach(function (w) {
+      var e = document.getElementById('tok-' + w), b = before[w]; if (!e || !b) return;
+      var nb = e.getBoundingClientRect(), dx = (b.left - nb.left) / SCALE, dy = (b.top - nb.top) / SCALE;
+      if (Math.abs(dx) + Math.abs(dy) < 2) return;
+      e.style.transition = 'none'; e.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      requestAnimationFrame(function () { requestAnimationFrame(function () { e.style.transition = 'transform .7s cubic-bezier(.3,.7,.2,1)'; e.style.transform = ''; }); });
+    });
+    if (S.round !== U.lastRound && S.phase === 'actions') { U.lastRound = S.round; nightBanner(); }
+    spawnFeed();
+    renderDebug(); placeCoach(); if (U.tut) setTimeout(placeCoach, 350);
+  }
+  function layoutOutlines() { // ?layout=1 or Debug → "boxes": draws every layout box over the art to check alignment
+    if (!document.body.classList.contains('showLayout')) return '';
+    var o = '';
+    Object.keys(A.board.ui).forEach(function (k) { o += '<div class="lo art" style="' + box(A.board.ui[k]) + '"><i>' + k + '</i></div>'; });
+    Object.keys(A.board.zones).forEach(function (k) { o += '<div class="lo zonebox" style="' + box(A.board.zones[k]) + '"><i>zone ' + k + '</i></div>'; });
+    Object.keys(BL.boxes).forEach(function (k) { if (typeof BL.boxes[k] !== 'string') o += '<div class="lo ovr" style="' + box(BL.boxes[k]) + '"><i>' + k + ' (override)</i></div>'; });
+    return o;
+  }
+  function nightBanner() {
+    var S = U.game.state, ev = S.lastEvent, b = layoutBox('banner');
+    var el = document.createElement('div'); el.className = 'nightBanner'; el.style.cssText = box(b);
+    el.innerHTML = '<div class="nb1">' + X('hud.night', { n: S.round, total: U.game.cfg.rounds }) + '</div><div class="nb2">' + esc(eventName(ev.id)) + '</div><div class="nb3">' + (ev.cancelled ? X('hud.eventCancelled') : X('eventEffects.' + ev.id)) + '</div><div class="nb4">' + H(TXT.events[ev.id] || '') + '</div>';
+    stage.appendChild(el); setTimeout(function () { el.remove(); }, 2600);
+  }
 
-    app.innerHTML =
-      '<div class="panel"><div class="row"><div class="col">' +
-        '<span class="stat">Round <b>' + S.round + '</b>/' + cfg.rounds + '</span>' +
-        '<span class="stat">Actions left <b>' + S.actionsLeft + '</b></span>' +
-        '<span class="stat">Progress <b>' + S.progress + '</b></span>' +
-        '<span class="stat">Bar <b>' + (S.bars ? 'DOWN' : 'none') + '</b></span>' +
-        (S.torch ? '<span class="stat">Torch <b>-' + S.torch + '</b></span>' : '') +
-        '<span class="stat muted">Deck ' + S.deck.length + ' · discard ' + S.discard.length + '</span>' +
-      '</div><div><h3>Pressure</h3><div class="track">' + track + '</div><div class="muted">' + esc(band(S.pressure)) + '</div></div></div></div>' +
-      '<div class="panel event"><b>Night ' + S.round + ': ' + esc(evDef.name) + '</b>' + (ev.cancelled ? ' — <span class="good">cancelled by a Bar</span>' : '') + '<br><span class="muted">' + T(TXT.events[ev.id] || '') + '</span></div>' +
-      (U.msg ? '<div class="panel ' + (U.msg.kind || '') + '">' + esc(U.msg.text) + '</div>' : '') +
-      (U.lastResult ? '<div class="panel result">' + esc(U.lastResult) + '</div>' : '') +
-      '<div class="panel"><div class="zones">' + zones + '</div></div>' +
-      '<div class="panel actions"><h3>' + (inDiscard ? 'Hand over limit — discard down to ' + cfg.handLimit : 'Actions') + '</h3>' +
-        (inDiscard ? '' :
-        moves +
-        '<button id="aInv"' + (a ? '' : ' disabled') + '>Investigate ' + cfg.zones[S.pov].name + ' (INSIGHT ' + Math.max(0, cfg.zones[S.pov].investigateDifficulty - S.torch) + ')</button>' +
-        '<button id="aSteady"' + (a ? '' : ' disabled') + '>Steady (CARE ' + cfg.steadyDifficulty + ')</button>' +
-        '<button id="aHold"' + (a && inHouse && (cfg.barsStack || !S.bars) ? '' : ' disabled title="' + (!inHouse ? 'House only' : (!cfg.barsStack && S.bars) ? 'A Bar is already down (max 1)' : 'No action left') + '"') + '>Hold the door (NERVE ' + cfg.holdDoorDifficulty + ')</button>' +
-        (!cfg.barsStack && S.bars ? '<span class="muted"> A Bar is down: the next Night event is cancelled. Bars don\'t stack, so Hold the door and Mother\'s Rule are unavailable until it is used.</span>' : '') +
-        '<button id="aDraw"' + (a && S.deck.length ? '' : ' disabled') + '>Draw 1</button>' +
-        '<button id="aEnd" class="primary">' + (S.actionsLeft > 0 ? 'End round (pass ' + S.actionsLeft + ')' : 'End round ▸') + '</button>') +
-      '</div>' +
-      '<div class="panel"><h3>Hand (' + S.hand.length + '/' + cfg.handLimit + ') — Play for the effect (1 action) or commit to a test for icons (free)</h3><div class="cards">' + hand + '</div></div>' +
-      '<div class="row"><div class="panel col"><h3>Threads (pay at the end)</h3>' + threads + '</div><div class="panel col"><h3>Companion Help (once each)</h3>' + helps + '</div></div>';
-
-    on('aIn', function () { act(G.move(S.pov - 1)); });
-    on('aOut', function () { act(G.move(S.pov + 1)); });
-    on('aInv', function () { openTest({ kind: 'investigate', stat: 'INSIGHT', zone: S.pov }); });
-    on('aSteady', function () { openTest({ kind: 'steady', stat: 'CARE' }); });
-    on('aHold', function () { openTest({ kind: 'holdDoor', stat: 'NERVE' }); });
-    on('aDraw', function () { act(G.drawAction()); });
-    on('aEnd', function () { U.lastResult = null; act(G.endRound()); });
-    Array.prototype.forEach.call(app.querySelectorAll('[data-play]'), function (b) { b.onclick = function () { playCard(b.dataset.play); }; });
-    Array.prototype.forEach.call(app.querySelectorAll('[data-discard]'), function (b) { b.onclick = function () { act(G.discardDown(b.dataset.discard)); }; });
-    renderDebug();
+  function feedText(f) {
+    var cs = feedCause(f.src || {});
+    if (f.type === 'pressure') return P('feed.dread', { sign: f.delta > 0 ? '+' : '−', n: Math.abs(f.delta), cause: cs });
+    if (f.type === 'progress') return P('feed.clues', { n: f.delta, cause: cs });
+    if (f.type === 'c1') return P(f.delta > 0 ? 'feed.c1Out' : 'feed.c1In', { zone: zoneName(U.game.cfg.zones[f.to].id), cause: cs });
+    if (f.type === 'bar') return P('feed.bar', { cause: cs });
+    if (f.type === 'barUsed') return P('feed.barUsed', { cause: cs });
+    return '';
+  }
+  function feedCause(s) {
+    if (s.type === 'event') return P('feed.cause.event', { event: eventName(s.id) });
+    if (s.type === 'card') return P('feed.cause.card', { card: cardName(s.id) });
+    if (s.type === 'search') return P('feed.cause.search', { zone: zoneName(s.id) });
+    return s.type ? P('feed.cause.' + s.type) : '';
+  }
+  function spawnFeed() {
+    var S = U.game.state, fresh = S.feed.slice(U.feedSeen); U.feedSeen = S.feed.length;
+    fresh.forEach(function (f, i) {
+      var tid = f.type === 'pressure' ? 'dread' : f.type === 'progress' ? 'clues' : f.type === 'c1' ? 'tok-C1' : f.type === 'bar' ? 'door' : 'nightEvent';
+      setTimeout(function () {
+        var t = document.getElementById(tid); if (!t) return;
+        t.classList.remove('pulse'); void t.offsetWidth; t.classList.add('pulse');
+        var r = t.getBoundingClientRect(), el = document.createElement('div');
+        el.className = 'toast ' + (f.type === 'pressure' ? (f.delta > 0 ? 'bad' : 'good') : f.type === 'c1' ? (f.delta > 0 ? 'bad' : 'good') : 'good');
+        el.textContent = feedText(f);
+        el.style.left = Math.max(8, Math.min(window.innerWidth - 340, r.left + r.width / 2 - 160)) + 'px';
+        el.style.top = Math.min(window.innerHeight - 60, r.bottom + 6) + 'px';
+        layer.appendChild(el); setTimeout(function () { el.remove(); }, 3200);
+      }, 250 + i * 450);
+    });
   }
 
   function act(res) {
-    U.msg = res && !res.ok ? { kind: 'warn', text: res.error } : null;
-    if (res && res.test) U.lastResult = describeTest(res.test);
+    if (res && !res.ok) flashMsg(res.error);
+    U.moveMode = false;
     renderEncounter();
   }
-  function describeTest(r) {
-    var tok = r.star ? 'STAR' : (r.token >= 0 ? '+' + r.token : String(r.token));
-    return r.label + ' — ' + r.stat + ' vs ' + r.difficulty + '\n' +
-      'base ' + r.base + ' + icons ' + r.icons + ' + help ' + r.help + ' + draw ' + tok + ' (d6 rolled ' + r.roll + ') = ' + (r.star ? 'auto-fail' : r.total) + '\n' +
-      (r.star ? '✶ STAR: automatic fail, pressure +' + cfg.starPressure : r.strong ? 'STRONG SUCCESS' : r.success ? 'Success' : 'Fail');
+  function flashMsg(text) {
+    var el = document.createElement('div'); el.className = 'toast warn center'; el.textContent = text;
+    el.style.left = (window.innerWidth / 2 - 200) + 'px'; el.style.top = (window.innerHeight * 0.4) + 'px';
+    layer.appendChild(el); setTimeout(function () { el.remove(); }, 2600);
   }
-
   function playCard(id) {
-    var G = U.game, c = G.card(id);
-    if (c.effect === 'investigateYardFromHouse') return openTest({ kind: 'play', cardId: id, stat: 'INSIGHT', zone: 1 });
-    if (c.effect === 'investigateAnyZone') return openTest({ kind: 'play', cardId: id, stat: 'INSIGHT', zone: U.game.state.pov, chooseZone: true });
-    if (c.effect === 'readyHelp') {
-      var S = G.state, used = ['c1', 'c2'].filter(function (w) { return S.helps[w].used; });
-      if (used.length > 1) {
-        var w = confirm('Ready ' + names().C1 + "'s Help? (Cancel = " + names().C2 + "'s)") ? 'c1' : 'c2';
-        return act(G.play(id, { helpToReady: w }));
-      }
-      return act(G.play(id, { helpToReady: used[0] }));
+    var G = U.game, S = G.state, c = G.card(id), can = G.canPlay(id);
+    closeZoom();
+    if (!can.ok) { flashMsg(cardName(id) + ': ' + can.why); return; }
+    if (c.effect === 'investigateYardFromHouse') return openTray({ kind: 'card', cardId: id, stat: 'INSIGHT', zone: 1 });
+    if (c.effect === 'investigateAnyZone') return openTray({ kind: 'card', cardId: id, stat: 'INSIGHT', zone: S.pov, pickZone: true });
+    if (c.effect === 'readyHelp' && S.helps.c1.used && S.helps.c2.used) {
+      return openPanel('<h2>' + X('cardUi.pierogiWhich') + '</h2><div class="btns">' + ['c1', 'c2'].map(function (w) { return '<button data-w="' + w + '">' + esc(Skin.speaker(w.toUpperCase(), names())) + '</button>'; }).join('') + '</div>', function () {
+        all('#overlayBox [data-w]', function (b) { b.onclick = function () { closeOverlay(); act(G.play(id, { helpToReady: b.dataset.w })); tutSignal('play:' + id); }; });
+      });
     }
-    act(G.play(id));
+    var r = G.play(id); act(r); if (r.ok) tutSignal('play:' + id);
   }
-
-  // ---------- Test panel (commit cards + Help before the draw) ----------
-  function openTest(o) {
-    U.test = { kind: o.kind, stat: o.stat, cardId: o.cardId, zone: o.zone, chooseZone: o.chooseZone, commits: [], helps: [] };
-    renderTest();
-  }
-  function testDifficulty() {
-    var G = U.game, S = G.state, x = U.test;
-    if (x.kind === 'steady') return cfg.steadyDifficulty;
-    if (x.kind === 'holdDoor') return cfg.holdDoorDifficulty;
-    return Math.max(0, cfg.zones[x.zone].investigateDifficulty - S.torch);
-  }
-  function renderTest() {
-    var G = U.game, S = G.state, x = U.test, n = names();
-    var icon = Engine.ICON_OF_STAT[x.stat];
-    var label = x.kind === 'play' ? G.card(x.cardId).name : ({ investigate: 'Investigate', steady: 'Steady', holdDoor: 'Hold the door' })[x.kind];
-    var cards = S.hand.filter(function (id) { return id !== x.cardId; }).map(function (id) {
-      var c = G.card(id), m = c.icons.filter(function (i) { return i === icon; }).length, sel = x.commits.indexOf(id) >= 0;
-      return '<div class="card' + (sel ? ' sel' : '') + '"><div class="nm">' + T(c.name) + '</div><div class="ic">' + icons(c.icons) + '</div><div class="fx muted">' + T(c.text) + '</div><div>+' + m + ' to this test</div><button data-c="' + id + '">' + (sel ? 'Un-commit' : 'Commit') + '</button></div>';
-    }).join('') || '<span class="muted">No cards to commit.</span>';
-    var helps = ['c1', 'c2'].map(function (w) {
-      var e = G.helpEligible(w, x.stat), sel = x.helps.indexOf(w) >= 0;
-      return '<label' + (e.ok ? '' : ' class="muted"') + '><input type="checkbox" data-h="' + w + '"' + (sel ? ' checked' : '') + (e.ok ? '' : ' disabled') + '> ' + esc(w === 'c1' ? n.C1 : n.C2) + ' Help ' + (e.ok ? '+' + e.bonus + ' ' + T(TXT.helpLines[w]) : '(' + esc(e.why) + ')') + '</label><br>';
-    }).join('');
-    var zoneSel = x.chooseZone ? '<p>Zone: ' + cfg.zones.map(function (z, i) { return '<label><input type="radio" name="tz" value="' + i + '"' + (i === x.zone ? ' checked' : '') + '> ' + z.name + ' (' + z.investigateDifficulty + ' → +' + z.progress + ')</label> '; }).join('') + '</p>' : '';
-    var diff = testDifficulty();
-    var pv = G.previewTest(x.stat, diff, x.commits, x.helps);
-    overlay.classList.remove('hidden');
-    overlayBox.innerHTML = '<h2>' + T(label) + ' — ' + x.stat + ' test, difficulty ' + diff + '</h2>' + zoneSel +
-      '<p>Total = base ' + pv.base + ' + icons ' + pv.icons + ' + help ' + pv.help + ' = <b>' + pv.preDraw + '</b> before the draw. ' +
-      'Draw (d6): 1–3 = 0 · 4 = −1 · 5 = +1 · 6 = STAR (fail, pressure +' + cfg.starPressure + '). Strong success at ' + (diff + cfg.strongMargin) + '+.</p>' +
-      '<h3>Commit cards (free, discarded; matching ' + icon + ' icons count)</h3><div class="cards">' + cards + '</div>' +
-      '<h3>Help</h3>' + helps +
-      '<p><button class="primary" id="tGo">Draw &amp; resolve</button> <button id="tCancel">Cancel</button></p>';
-    Array.prototype.forEach.call(overlayBox.querySelectorAll('[data-c]'), function (b) {
-      b.onclick = function () { var i = x.commits.indexOf(b.dataset.c); if (i >= 0) x.commits.splice(i, 1); else x.commits.push(b.dataset.c); renderTest(); };
-    });
-    Array.prototype.forEach.call(overlayBox.querySelectorAll('[data-h]'), function (b) {
-      b.onchange = function () { var i = x.helps.indexOf(b.dataset.h); if (i >= 0) x.helps.splice(i, 1); else x.helps.push(b.dataset.h); renderTest(); };
-    });
-    Array.prototype.forEach.call(overlayBox.querySelectorAll('input[name=tz]'), function (b) { b.onchange = function () { x.zone = +b.value; renderTest(); }; });
-    on('tCancel', function () { closeOverlay(); U.test = null; });
-    on('tGo', function () {
-      var p = { commits: x.commits.slice(), helps: x.helps.slice() }, res;
-      if (x.kind === 'investigate') res = G.investigate(p);
-      else if (x.kind === 'steady') res = G.steady(p);
-      else if (x.kind === 'holdDoor') res = G.holdDoor(p);
-      else { p.zone = x.zone; res = G.play(x.cardId, p); }
-      closeOverlay(); U.test = null; act(res);
-    });
-  }
-  function closeOverlay() { overlay.classList.add('hidden'); overlayBox.innerHTML = ''; }
-
-  // ---------- Allocation ----------
-  function renderAllocate() {
-    U.screen = 'allocate';
+  function wireEncounter() {
     var G = U.game, S = G.state;
-    var v = G.validateAllocation(U.alloc);
-    var cost = 0; U.alloc.forEach(function (id) { cost += cfg.threads.filter(function (x) { return x.id === id; })[0].cost; });
-    var head = S.endReason === 'pressure' ? '<p class="bad">' + T(TXT.earlyEnd) + '</p><p>Pressure reached ' + cfg.pressureMax + ': you may resolve at most ' + cfg.maxThreadsIfPressureMaxed + ' Thread.</p>' : '<p>' + T(TXT.dawn) + '</p>';
-    var threads = cfg.threads.map(function (th) {
-      var sel = U.alloc.indexOf(th.id) >= 0;
-      return '<div class="thread' + (sel ? ' on' : '') + '"><label><input type="checkbox" data-t="' + th.id + '"' + (sel ? ' checked' : '') + '> <b>' + th.id + ' · ' + th.name + '</b> — cost ' + th.cost + '</label><br><span class="muted">' + T(TXT.threads[th.id]) + '</span></div>';
-    }).join('');
-    app.innerHTML = '<div class="panel"><h2>' + (S.endReason === 'pressure' ? 'The night breaks' : 'Dawn') + '</h2>' + head +
-      '<p>Progress: <b>' + S.progress + '</b> · selected cost: <b>' + cost + '</b> · unspent progress is lost. Escaped together: <b>' + (G.escapedTogether() ? 'Y' : 'N') + '</b> (needed for all three).</p>' +
-      threads + (v.ok ? '' : '<p class="warn">' + esc(v.error) + '</p>') +
-      '<button class="primary" id="bResolve"' + (v.ok ? '' : ' disabled') + '>Resolve ' + (U.alloc.length ? U.alloc.join(' + ') : 'nothing') + '</button></div>';
-    Array.prototype.forEach.call(app.querySelectorAll('[data-t]'), function (b) {
-      b.onchange = function () { var i = U.alloc.indexOf(b.dataset.t); if (i >= 0) U.alloc.splice(i, 1); else U.alloc.push(b.dataset.t); renderAllocate(); };
+    on('btnMenu', openMenu);
+    on('act-end', function () { closeZoom(); var r = G.endRound(); act(r); if (r.ok) tutSignal('endTurn'); });
+    actionDefs().forEach(function (d) { on('act-' + d.id, function () { if (d.ok) d.run(); }); });
+    on('hintOff', function () { U.hints = false; renderEncounter(); });
+    all('.zone', function (z) {
+      z.onclick = function () { var i = +z.dataset.zone; if (canAct() && Math.abs(i - S.pov) === 1 && !U.tray) act(G.move(i)); };
     });
-    on('bResolve', function () { var r = G.allocate(U.alloc); if (r.ok) renderOutro(); else { U.msg = { text: r.error }; renderAllocate(); } });
+    all('[data-discard]', function (b) { b.onclick = function (e) { e.stopPropagation(); act(G.discardDown(b.dataset.discard)); }; });
+    var drop = document.getElementById('dropPlay');
+    all('.hcard', function (h) {
+      var id = h.dataset.card;
+      h.onmouseenter = function () { if (!U.pinned) showZoom(id, h, false); };
+      h.onmouseleave = function () { if (!U.pinned) closeZoom(); };
+      h.onclick = function (e) {
+        if (e.target.closest('[data-discard]')) return;
+        if (U.tray && !U.tray.result) { toggleCommit(id); return; }
+        e.stopPropagation(); showZoom(id, h, true);
+      };
+      h.ondragstart = function (e) { closeZoom(); e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed = 'move'; drop.classList.add('show'); h.classList.add('dragging'); };
+      h.ondragend = function () { drop.classList.remove('show', 'over'); h.classList.remove('dragging'); };
+    });
+    drop.ondragover = function (e) { e.preventDefault(); drop.classList.add('over'); };
+    drop.ondragleave = function () { drop.classList.remove('over'); };
+    drop.ondrop = function (e) { e.preventDefault(); drop.classList.remove('show', 'over'); var id = e.dataTransfer.getData('text/plain'); if (id && (!U.tut || tutAllows('card-' + id))) playCard(id); };
+    all('.qchip', function (q) {
+      q.onmouseenter = function () { showQZoom(q.dataset.q, q); };
+      q.onmouseleave = function () { if (!U.pinned) closeZoom(); };
+    });
+    if (U.tray) wireTray();
+  }
+
+  // ---------- card zoom (screen pixels, readable at any window size) ----------
+  function showZoom(id, anchor, pin) {
+    closeZoom(); U.pinned = pin ? id : null;
+    var G = U.game, can = G ? G.canPlay(id) : { ok: false }, S = G && G.state;
+    var why = !can.ok ? (can.why === 'no action' ? P('reasons.noActions') : can.why) : '';
+    var zw = Math.round(Math.min(340, window.innerHeight * 0.42)), r = anchor.getBoundingClientRect();
+    var el = document.createElement('div'); el.id = 'zoom'; el.className = 'zoom' + (pin ? ' pinned' : '');
+    el.innerHTML = cardHTML(id, { w: zw }) + (pin && S && S.phase === 'actions' ? '<div class="zoomBar"><button class="primary" id="zoomPlay" data-ctl="card-' + id + '"' + (can.ok ? '' : ' disabled') + tipA(can.ok ? P('cardUi.playTip', { effect: P('cards.' + id + '.text') }) : why) + '>' + X('cardUi.play') + ' · 1 ' + esc(term('TERM_ACTION')) + '</button>' +
+      (can.ok ? '' : '<div class="zwhy">' + esc(why) + '</div>') + '<div class="zhint">' + X('cardUi.addHint') + '</div></div>' : '');
+    layer.appendChild(el);
+    var h = el.getBoundingClientRect().height;
+    el.style.left = Math.max(8, Math.min(window.innerWidth - zw - 8, r.left + r.width / 2 - zw / 2)) + 'px';
+    el.style.top = Math.max(8, r.top - h - 12) + 'px';
+    on('zoomPlay', function (e) { e.stopPropagation(); playCard(id); });
+    if (pin) placeCoach();
+  }
+  function showQZoom(qid, anchor) {
+    closeZoom();
+    var zw = Math.round(Math.min(300, window.innerHeight * 0.38)), r = anchor.getBoundingClientRect();
+    var el = document.createElement('div'); el.id = 'zoom'; el.className = 'zoom';
+    el.innerHTML = questionCardHTML(qid, { w: zw, have: U.game ? U.game.state.progress : null });
+    layer.appendChild(el);
+    el.style.left = Math.max(8, Math.min(window.innerWidth - zw - 8, r.left + r.width / 2 - zw / 2)) + 'px';
+    el.style.top = Math.min(window.innerHeight - el.getBoundingClientRect().height - 8, r.bottom + 10) + 'px';
+  }
+  function closeZoom() { var had = U.pinned; U.pinned = null; var z = document.getElementById('zoom'); if (z) z.remove(); if (had && U.tut) placeCoach(); }
+  document.addEventListener('click', function (e) { if (U.pinned && !e.target.closest('#zoom') && !e.target.closest('.hcard')) closeZoom(); });
+
+  // ---------- ROLL DIALOG (adding cards is a step inside it) ----------
+  function openTray(o) {
+    closeZoom(); U.moveMode = false;
+    U.tray = Object.assign({ commits: [], helps: [], result: null }, o);
+    renderEncounter(); tutSignal('trayOpen');
+  }
+  function trayNeed() {
+    var T = U.tray, c = U.game.cfg;
+    if (T.kind === 'steady') return c.steadyDifficulty;
+    if (T.kind === 'holdDoor') return c.holdDoorDifficulty;
+    return searchNeed(T.zone);
+  }
+  function trayTitle() {
+    var T = U.tray;
+    if (T.kind === 'steady') return P('roll.titleComfort');
+    if (T.kind === 'holdDoor') return P('roll.titleHold');
+    if (T.kind === 'card') return P('roll.titleCard', { card: cardName(T.cardId), zone: zoneName(U.game.cfg.zones[T.zone].id) });
+    return P('roll.titleSearch', { zone: zoneName(U.game.cfg.zones[T.zone].id) });
+  }
+  function toggleCommit(id) {
+    var T = U.tray, G = U.game; if (!T || T.result || id === T.cardId) return;
+    if (G.card(id).icons.indexOf(Engine.ICON_OF_STAT[T.stat]) < 0) return;
+    var i = T.commits.indexOf(id); if (i >= 0) T.commits.splice(i, 1); else T.commits.push(id);
+    renderEncounter();
+  }
+  function faceLabel(tok) { return tok === 'STAR' ? P('roll.faceOmen') : tok > 0 ? '+' + tok : tok < 0 ? '−' + (-tok) : '+0'; }
+  function trayHTML() {
+    var G = U.game, S = G.state, T = U.tray, need = trayNeed(), ic = Engine.ICON_OF_STAT[T.stat];
+    var od = oddsOf(T.stat, need, T.commits, T.helps), pv = od.pv;
+    var cands = S.hand.filter(function (id) { return id !== T.cardId && G.card(id).icons.indexOf(ic) >= 0; });
+    var addRows = cands.length ? cands.map(function (id) {
+      var n = G.card(id).icons.filter(function (x) { return x === ic; }).length, on = T.commits.indexOf(id) >= 0;
+      return '<button class="addrow' + (on ? ' on' : '') + '" data-commit="' + id + '"' + (T.result ? ' disabled' : '') + tipA(P('roll.addTip')) + '>' +
+        (A.cardArt[id] ? '<img src="' + A.cardArt[id] + '" alt="">' : '<span class="gbthumb"></span>') +
+        '<span class="an">' + esc(cardName(id)) + '<small>' + X('roll.addPlayInstead', { effect: P('cards.' + id + '.text') }) + '</small></span>' +
+        '<span class="av">' + X('roll.addRow', { n: n }) + ' ' + statIcon(T.stat, { notip: true }) + '</span><span class="ack">' + (on ? '✓' : '+') + '</span></button>';
+    }).join('') : '<div class="none">' + X('roll.addNone') + '</div>';
+    var helpRows = ['c1', 'c2'].map(function (w) {
+      var e = G.helpEligible(w, T.stat), on = T.helps.indexOf(w) >= 0, close = G.helpBonus(w) === G.cfg.helpBonusBonded;
+      var why = e.ok ? '' : S.helps[w].used ? P('reasons.helpUsed') : e.why.indexOf('House') >= 0 ? P('reasons.helpNotHome') : P('reasons.helpWrongStat');
+      return '<button class="helprow' + (on ? ' on' : '') + '" data-help="' + w + '"' + (e.ok && !T.result ? '' : ' disabled') + tipA(e.ok ? P('roll.helpOffer', { who: Skin.speaker(w.toUpperCase(), names()), bonus: G.helpBonus(w), close: close ? P('roll.helpCloseTag') : '' }) : why) + '>' +
+        (A.portraits[w.toUpperCase()] ? '<img src="' + A.portraits[w.toUpperCase()] + '" alt="">' : '') + '<span>' + esc(Skin.speaker(w.toUpperCase(), names())) + ' <b>+' + G.helpBonus(w) + '</b>' + (e.ok ? '' : '<small>' + esc(why) + '</small>') + '</span><span class="ack">' + (on ? '✓' : '+') + '</span></button>';
+    }).join('');
+    var r = T.result;
+    var faces = od.o.faces.map(function (f) {
+      var res = f.result === 'star' ? P('roll.resOmen') : f.result === 'strong' ? P('roll.resStrong') : f.result === 'success' ? P('roll.resWin') : P('roll.resFail');
+      return '<div class="face ' + f.result + (r && r.roll === f.roll ? ' rolled' : '') + '"' + tipA(P('roll.faceTip', { face: f.roll, result: res })) + '><div class="fn">' + f.roll + '</div><div class="ft">' + (f.token === 'STAR' ? icon('STAR', { alt: '' }) : esc(faceLabel(f.token))) + '</div><div class="fr">' + esc(res) + '</div></div>';
+    }).join('');
+    var zonePick = T.pickZone && !r ? '<div class="zonepick">' + X('roll.zonePick') + ' ' + G.cfg.zones.map(function (z, i) {
+      return '<button data-zonepick="' + i + '" class="' + (T.zone === i ? 'on' : '') + '">' + esc(zoneName(z.id)) + ' · ' + X('board.zoneBadge', { need: searchNeed(i), gain: z.progress }) + '</button>'; }).join('') + '</div>' : '';
+    var resultBox = r ? '<div class="rollResult ' + (r.star ? 'omen' : r.success ? 'win' : 'fail') + '" id="rollResult"><div class="rr1">' +
+      (r.star ? X('roll.omen') : r.strong ? X(T.kind === 'steady' ? 'roll.strongComfort' : 'roll.strong') : r.success ? X('roll.success') : X('roll.fail')) + '</div><div class="rr2">' +
+      X('roll.resultLine', { face: r.roll, total: r.star ? '—' : r.total, need: r.difficulty }) + '</div>' +
+      '<button class="primary" id="rollDone">' + X('roll.continue') + ' ▸</button></div>' : '';
+    return '<div class="tray" id="tray" style="' + box(layoutBox('tray')) + '"><div class="trayHead"><div class="tt">' + esc(trayTitle()) + '</div>' +
+      '<div class="tu">' + statIcon(T.stat, { notip: true }) + X('roll.uses', { stat: statName(T.stat) }) + '</div>' +
+      '<div class="tneed"' + tipA(P('roll.needTip')) + '>' + X('roll.need', { need: need }) + '</div></div>' + zonePick +
+      '<div class="trayBody"><div class="tcol"><div class="th">' + X('roll.addTitle') + '</div><div class="addlist" id="rollAdd">' + addRows + '</div>' +
+        '<div class="th">' + X('roll.helpTitle') + '</div><div class="helplist">' + helpRows + '</div></div>' +
+      '<div class="tcol right"><div class="parts">' + X('roll.parts', { base: pv.base, icons: pv.icons, help: pv.help }) + '</div>' +
+        '<div class="total">' + X('roll.total', { total: pv.preDraw, need: need, pct: Odds.pct(od.o.p) }) + '</div>' +
+        '<div class="th"' + tipA(P('roll.diceTip')) + '>' + X('roll.dice') + '</div><div class="faces">' + faces + '</div>' +
+        (r ? resultBox : '<div class="tbtns"><button id="rollCancel"' + tipA(P('roll.cancelTip')) + '>' + X('roll.cancel') + '</button><button class="primary big" id="rollGo"' + tipA(P('roll.confirmTip')) + '>' + X('roll.confirm') + ' 🎲</button></div>') +
+      '</div></div></div>';
+  }
+  function wireTray() {
+    var G = U.game, T = U.tray;
+    all('[data-commit]', function (b) { b.onclick = function () { toggleCommit(b.dataset.commit); }; });
+    all('[data-help]', function (b) { b.onclick = function () { var i = T.helps.indexOf(b.dataset.help); if (i >= 0) T.helps.splice(i, 1); else T.helps.push(b.dataset.help); renderEncounter(); }; });
+    all('[data-zonepick]', function (b) { b.onclick = function () { T.zone = +b.dataset.zonepick; renderEncounter(); }; });
+    on('rollCancel', function () { U.tray = null; renderEncounter(); tutSignal('trayCancel'); });
+    on('rollGo', function () {
+      var o = { commits: T.commits.slice(), helps: T.helps.slice() }, res;
+      if (T.kind === 'investigate') res = G.investigate(o);
+      else if (T.kind === 'steady') res = G.steady(o);
+      else if (T.kind === 'holdDoor') res = G.holdDoor(o);
+      else res = G.play(T.cardId, Object.assign(o, { zone: T.zone }));
+      if (!res.ok) { flashMsg(res.error); return; }
+      T.result = res.test; T.commits = []; T.helps = [];
+      renderEncounter(); tutSignal('roll'); if (T.kind === 'card') tutSignal('play:' + T.cardId);
+    });
+    on('rollDone', function () { U.tray = null; renderEncounter(); });
+  }
+
+  // ---------- DAWN: answer the Questions ----------
+  function clearToasts() { all('#layer .toast', function (t) { t.remove(); }); }
+  function renderDawn() {
+    U.screen = 'dawn'; clearToasts();
+    var G = U.game, S = G.state, c = G.cfg;
+    var v = G.validateAllocation(U.alloc), cost = 0;
+    U.alloc.forEach(function (id) { cost += c.threads.filter(function (t) { return t.id === id; })[0].cost; });
+    var left = S.progress - cost, esc2 = G.escapedTogether();
+    var cards = c.threads.map(function (th) {
+      var on = U.alloc.indexOf(th.id) >= 0, test = G.validateAllocation(on ? U.alloc : U.alloc.concat([th.id]));
+      var why = on || test.ok ? '' : dawnReason(U.alloc.concat([th.id]));
+      return '<div class="dq' + (on ? ' on' : '') + (why ? ' cant' : '') + '" data-q="' + th.id + '"' + tipA(why || P('dawn.tip')) + '>' +
+        questionCardHTML(th.id, { w: 340, have: on ? th.cost : Math.min(left, th.cost), extra: on ? '<div class="stamp">' + X('dawn.answered') + '</div>' : '' }) + (why ? '<div class="dwhy">' + esc(why) + '</div>' : '') + '</div>';
+    }).join('');
+    stage.innerHTML = bgHTML('dim') + '<div class="dawnScreen">' +
+      '<div class="dbanner ' + (S.pressureMaxed ? 'bad' : '') + '">' + X(S.pressureMaxed ? 'dawn.earlyBanner' : 'dawn.dawnBanner') + '</div>' +
+      '<h2>' + X('dawn.title') + '</h2><div class="dsub">' + X('dawn.blurb') + '</div>' +
+      '<div class="drow"><div class="dclues" id="clues">' + icon('progress', { alt: '' }) + '<span class="cn">' + left + '</span><span>' + X('dawn.clues', { n: left }) + '</span></div>' +
+      '<div class="dtog"' + tipA(P('dawn.togetherTip')) + '>' + X('dawn.together', { yn: P(esc2 ? 'dawn.yes' : 'dawn.no') }) + '</div>' +
+      (S.pressureMaxed ? '<div class="dwarn">' + X('dawn.broke', { cap: c.maxThreadsIfPressureMaxed }) + '</div>' : '') + '</div>' +
+      '<div class="dcards">' + cards + '</div>' +
+      (left > 0 ? '<div class="dwarn">' + X('dawn.warn') + '</div>' : '') +
+      '<button class="primary big" id="dawnDone"' + (v.ok ? '' : ' disabled') + tipA(P('dawn.confirmTip')) + '>' + X('dawn.confirm') + '</button></div>';
+    all('.dq', function (d) {
+      d.onclick = function () {
+        var id = d.dataset.q, i = U.alloc.indexOf(id);
+        if (i >= 0) U.alloc.splice(i, 1);
+        else { var nx = U.alloc.concat([id]); if (!G.validateAllocation(nx).ok) { flashMsg(dawnReason(nx)); return; } U.alloc = nx; }
+        renderDawn();
+      };
+    });
+    on('dawnDone', function () { var r = G.allocate(U.alloc); if (r.ok) startOutro(); else flashMsg(r.error); });
     renderDebug();
   }
+  function dawnReason(ids) {
+    var G = U.game, S = G.state, c = G.cfg, cost = 0;
+    ids.forEach(function (id) { cost += c.threads.filter(function (t) { return t.id === id; })[0].cost; });
+    if (cost > S.progress) return P('reasons.tooExpensive');
+    if (S.pressureMaxed && ids.length > c.maxThreadsIfPressureMaxed) return P('reasons.capBroken', { cap: c.maxThreadsIfPressureMaxed });
+    return P('reasons.needTogether');
+  }
 
-  // ---------- OUTRO ----------
-  function renderOutro() {
-    U.screen = 'outro';
+  // ---------- OUTRO: outcome scene → inserts → recap → results ----------
+  function recapLines(R) {
+    var ids = U.game.cfg.threads.map(function (t) { return t.id; });
+    var ans = ids.filter(function (id) { return R.threadsResolved.indexOf(id) >= 0; }), un = ids.filter(function (id) { return ans.indexOf(id) < 0; });
+    var j = function (l) { return l.map(function (id) { return L('recap.phrases.' + id); }).join(L('recap.join')); };
+    var key = !ans.length ? 'recap.none' : !un.length ? 'recap.all' : 'recap.some';
+    var out = [{ who: 'C2', text: fmt(L(key), { answered: j(ans), unanswered: j(un) }).replace(/^[^:]*: /, '') }];
+    if (cfg.recapTagLines) {
+      [R.escapedTogether === 'Y' ? 'togetherY' : 'togetherN', R.keyChoice === 'SHARED' ? 'shared' : 'kept'].forEach(function (k) { out.push(lineParts(L('recap.tags.' + k))); });
+    }
+    return out;
+  }
+  function startOutro() {
+    clearToasts();
     var G = U.game, S = G.state, R = S.result, o = TXT.outcomes[R.outcome];
     if (!U.saved) {
       var now = Date.now();
-      store.add(Stats.buildRecord(G, { runId: U.runId, skin: U.skin, tester: U.tester, outcomeScene: o.title, encounterSeconds: Math.round((now - U.tEncounter) / 1000), totalSeconds: Math.round((now - U.tStart) / 1000) }));
+      store.add(Stats.buildRecord(G, { runId: U.runId, skin: U.skin, tester: U.tester, outcomeScene: o.title, encounterSeconds: Math.round((now - U.tEncounter) / 1000), totalSeconds: Math.round((now - U.tStart) / 1000),
+        tutorial: U.tutInfo && U.tutInfo.used ? (U.tutInfo.skippedAt ? 'skipped@' + U.tutInfo.skippedAt : 'Y') : 'N' }));
       U.saved = true;
     }
-    var lines = o.lines.map(function (l) { return '<div class="box">' + lineHTML(l) + '</div>'; }).join('');
-    var ins = R.inserts.map(function (k) { return TXT.inserts[k].map(function (l) { return '<div class="box">' + lineHTML(l) + '</div>'; }).join(''); }).join('');
-    var flags = [['Threads resolved', R.threadsResolved.join(', ') || 'none'], ['Escaped together', R.escapedTogether], ['Final pressure', R.finalPressure],
-      ['Help used', R.helpsUsed.join(', ') || 'none'], [names().C1 + ' bond change (encounter)', (R.c1BondChange > 0 ? '+' : '') + R.c1BondChange], ['Beat 4 bond', R.bondChoice],
-      ['Final bond ' + names().C1 + ' / ' + names().C2, R.finalBondC1 + ' / ' + R.finalBondC2], ['Key choice', R.keyChoice],
-      ['Progress earned / at end / lost', S.progressEarned + ' / ' + R.progressAtEnd + ' / ' + R.progressLost], ['Rounds played', S.roundsPlayed + (S.endReason === 'pressure' ? ' (early end)' : ' (dawn)')],
-      ['Plays vs commits', S.stats.plays + ' vs ' + S.stats.commits]];
-    app.innerHTML = '<div class="vn"><div class="scene">' + esc(o.title) + '</div>' + (o.placeholder ? '<div class="box warn">Placeholder scene: final text to come from the Narrative Writer.</div>' : '') + lines + (ins ? '<div class="scene" style="margin-top:10px">Inserts</div>' + ins : '') + '</div>' +
-      '<div class="panel"><h3>Flags out</h3><table>' + flags.map(function (f) { return '<tr><th>' + esc(f[0]) + '</th><td>' + esc(f[1]) + '</td></tr>'; }).join('') + '</table>' +
-      '<p class="muted">This run was saved to Stats (' + store.all().length + ' run(s) in this browser).</p>' +
-      '<p><button class="primary" id="bAgain">Play again (new seed)</button> <button id="bSame">Replay same seed</button> <button id="bStats2">Stats / send results</button></p></div>';
-    on('bAgain', function () { U.seed = null; renderTitle(); });
-    on('bSame', function () { renderTitle(); });
+    var lines = o.lines.slice(); R.inserts.forEach(function (k) { lines = lines.concat(TXT.inserts[k] || []); });
+    var recap = recapLines(R), cast = sceneCast(lines.concat(recap));
+    var steps = lines.map(function (l, i) { return { type: 'line', scene: o.title, line: l, cast: cast, warn: o.placeholder && i === 0 }; });
+    recap.forEach(function (l, i) { steps.push({ type: 'line', scene: o.title, line: l, cast: cast, stop: i === 0 }); });
+    U.screen = 'outro'; U.revealed = [];
+    U.vn = { steps: steps, idx: 0, done: renderResults };
+    renderVN();
+  }
+  function renderResults() {
+    U.screen = 'results';
+    var G = U.game, S = G.state, R = S.result, o = TXT.outcomes[R.outcome];
+    var qn = R.threadsResolved.map(function (id) { return P('questions.' + id); }).join(' · ') || P('ui.none');
+    var rows = [['ui.flagQuestions', qn], ['ui.flagTogether', P(R.escapedTogether === 'Y' ? 'dawn.yes' : 'dawn.no')], ['ui.flagDread', R.finalPressure + ' / ' + G.cfg.pressureMax],
+      ['ui.flagHelp', R.helpsUsed.join(', ') || P('ui.none')], ['ui.flagBond', (R.c1BondChange > 0 ? '+' : '') + R.c1BondChange], ['ui.flagFinalBond', R.finalBondC1 + ' / ' + R.finalBondC2],
+      ['ui.flagKey', R.keyChoice], ['ui.flagClues', S.progressEarned + ' / ' + R.progressSpent + ' / ' + R.progressLost], ['ui.flagNights', S.roundsPlayed + ' / ' + G.cfg.rounds],
+      ['ui.flagPlays', S.stats.plays + ' / ' + S.stats.commits]];
+    stage.innerHTML = bgHTML('dim') + '<div class="title-panel results"><h2>' + H(o.title) + '</h2><h3>' + X('ui.resultsTitle') + '</h3><table class="flags">' +
+      rows.map(function (r) { return '<tr><th>' + X(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>'; }).join('') + '</table>' +
+      '<p class="muted">' + X('ui.savedNote', { n: store.all().length }) + '</p>' +
+      '<div class="btns"><button class="primary big" id="bAgain"' + tipA(P('ui.playAgainTip')) + '>' + X('ui.playAgain') + '</button><button id="bSame"' + tipA(P('ui.replaySameTip')) + '>' + X('ui.replaySame') + '</button><button id="bStats2"' + tipA(P('ui.sendStatsTip')) + '>' + X('ui.sendStats') + '</button></div></div>';
+    on('bAgain', function () { U.seed = null; U.runId = null; U.tStart = 0; renderTitle(); });
+    on('bSame', function () { U.runId = null; U.tStart = 0; renderTitle(); });
     on('bStats2', openStats);
     renderDebug();
   }
 
-  // ---------- Stats panel ----------
+  // ---------- overlays: menu, how to play, stats ----------
+  function openPanel(html, wire) { overlay.classList.remove('hidden'); overlayBox.innerHTML = html + '<div class="btns"><button class="primary" id="ovClose"' + tipA(P('ui.closeTip')) + '>' + X('ui.close') + '</button></div>'; on('ovClose', closeOverlay); if (wire) wire(); }
+  function closeOverlay() { overlay.classList.add('hidden'); overlayBox.innerHTML = ''; }
+  function openMenu() {
+    var G = U.game, inEnc = U.screen === 'encounter';
+    var items = [
+      ['mHow', 'ui.howToPlay', 'ui.howToPlayTip', true],
+      ['mTut', 'ui.tutorial', 'ui.tutorialTip', inEnc],
+      ['mHint', 'ui.hints', 'ui.hintsTip', inEnc, U.hints],
+      ['mStats', 'ui.stats', 'ui.statsTip', true],
+      ['mSeed', 'ui.replaySeed', 'ui.replaySeedTip', !!G],
+      ['mDebug', 'ui.debug', 'ui.debugTip', true, !dbg.classList.contains('hidden')],
+      ['mRestart', 'ui.restart', 'ui.restartTip', true]
+    ];
+    openPanel('<h2>' + X('ui.menu') + '</h2>' + (G ? '<div class="muted"' + tipA(P('ui.seedTip')) + '>' + X('ui.seed', { seed: G.state.seed }) + '</div>' : '') + '<div class="menuList">' +
+      items.filter(function (i) { return i[3]; }).map(function (i) { return '<button id="' + i[0] + '"' + tipA(P(i[2])) + '>' + X(i[1]) + (i.length > 4 ? ' <b>' + (i[4] ? '✓' : '—') + '</b>' : '') + '</button>'; }).join('') + '</div>', function () {
+      on('mHow', openHowTo);
+      on('mTut', function () { closeOverlay(); U.wantTutorial = true; startEncounter({ tutorial: true }); });
+      on('mHint', function () { U.hints = !U.hints; closeOverlay(); renderEncounter(); });
+      on('mStats', openStats);
+      on('mSeed', function () { closeOverlay(); U.seed = G.state.seed; startEncounter({ tutorial: false }); });
+      on('mDebug', function () { closeOverlay(); toggleDebug(); });
+      on('mRestart', function () { if (U.screen === 'title' || confirm(P('ui.restartConfirm'))) { closeOverlay(); U.game = null; U.seed = null; U.runId = null; U.tStart = 0; endCoach(true); renderTitle(); } });
+    });
+  }
+  function openHowTo() {
+    var HT = UT.howToPlay, ps = A.board.plateSlots;
+    var plates = ECFG.zones.map(function (z) {
+      var p = A.board.plates[z.id];
+      return '<div class="plate"' + tipA(P('board.zoneTip.' + z.id, { need: z.investigateDifficulty, gain: z.progress })) + '>' + (p ? '<img src="' + p + '" alt="">' : '<div class="gbplate"></div>') +
+        '<div class="c-box" data-box="plate.title" style="' + pctBox(ps.title, 480, 320) + '"><span>' + esc(zoneName(z.id)) + '</span></div>' +
+        '<div class="c-box pnr" data-box="plate.need_reward" style="' + pctBox(ps.need_reward, 480, 320) + '"><span>' + X('board.zoneBadge', { need: z.investigateDifficulty, gain: z.progress }) + '</span></div></div>';
+    }).join('');
+    openPanel('<h2>' + H(HT.title) + '</h2><div class="howto">' + HT.body.map(function (p) { return '<p>' + H(p, { max: cfg.pressureMax }) + '</p>'; }).join('') + '</div>' +
+      '<div class="plates">' + plates + '</div>' +
+      '<h3>' + H(HT.glossaryTitle) + '</h3><table class="gloss">' + HT.glossary.map(function (g) { return '<tr><th>' + H(g[0]) + '</th><td>' + H(g[1], { max: cfg.pressureMax }) + '</td></tr>'; }).join('') + '</table>');
+  }
   function openStats() {
     var runs = store.all(), sm = Stats.summary(runs);
-    var cols = ['finishedAt', 'tester', 'seed', 'outcome', 'endReason', 'roundsPlayed', 'progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice', 'playsVsCommits', 'encounterSeconds'];
-    overlay.classList.remove('hidden');
-    overlayBox.innerHTML = '<h2>Run stats (this browser)</h2>' +
-      '<p>Runs: <b>' + sm.runs + '</b> · outcomes: ' + esc(JSON.stringify(sm.outcomes)) + ' · avg progress earned ' + sm.avgProgressEarned + ' · avg final pressure ' + sm.avgFinalPressure +
-      ' · escaped together ' + sm.escapedY + '/' + sm.runs + ' · early ends ' + sm.early + ' · threads T1/T2/T3 ' + sm.threadRate.T1 + '/' + sm.threadRate.T2 + '/' + sm.threadRate.T3 + ' · plays/commits ' + sm.plays + '/' + sm.commits + '</p>' +
-      '<div style="overflow:auto"><table><tr>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>' +
+    var cols = ['finishedAt', 'tester', 'seed', 'outcome', 'endReason', 'roundsPlayed', 'progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'playsVsCommits', 'tutorial', 'encounterSeconds'];
+    openPanel('<h2>' + X('ui.statsTitle') + '</h2><p>' + X('ui.statsSummary', { runs: sm.runs, outcomes: JSON.stringify(sm.outcomes), avg: sm.avgProgressEarned, dread: sm.avgFinalPressure, safe: sm.escapedY }) + '</p>' +
+      '<div class="tablewrap"><table class="stats"><tr>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>' +
       runs.slice().reverse().map(function (r) { return '<tr>' + cols.map(function (c) { return '<td>' + esc(r[c] == null ? '' : r[c]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>' +
-      '<p><button id="sCopyJ">Copy JSON</button> <button id="sCopyC">Copy CSV</button> <button id="sDlJ">Download JSON</button> <button id="sDlC">Download CSV</button> <button id="sClear">Clear all stats</button> <button class="primary" id="sClose">Close</button></p>' +
-      '<p class="muted">Send the downloaded file (or pasted text) to the studio. Stats stay only in this browser.</p><textarea id="sOut" readonly placeholder="Copied text appears here too, in case clipboard access is blocked."></textarea>';
-    function copy(txt) {
-      document.getElementById('sOut').value = txt;
-      if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function () { flash('Copied.'); }, function () { flash('Clipboard blocked — select the text below.'); });
-      else flash('Select the text below and copy it.');
-    }
-    function dl(txt, name, type) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
-    function stamp() { return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'); }
-    on('sCopyJ', function () { copy(Stats.toJSON(store.all())); });
-    on('sCopyC', function () { copy(Stats.toCSV(store.all())); });
-    on('sDlJ', function () { dl(Stats.toJSON(store.all()), 'cottage-runs-' + stamp() + '.json', 'application/json'); });
-    on('sDlC', function () { dl(Stats.toCSV(store.all()), 'cottage-runs-' + stamp() + '.csv', 'text/csv'); });
-    on('sClear', function () { if (confirm('Delete all saved runs in this browser?')) { store.clear(); openStats(); } });
-    on('sClose', closeOverlay);
-  }
-  function flash(m) { var o = document.getElementById('sOut'); if (o) o.placeholder = m; var b = document.createElement('div'); b.className = 'muted'; b.textContent = m; overlayBox.appendChild(b); setTimeout(function () { b.remove(); }, 2500); }
-
-  function openRules() {
-    overlay.classList.remove('hidden');
-    overlayBox.innerHTML = '<h2>Quick rules</h2><ul>' +
-      '<li><b>Goal:</b> ' + T(TXT.encounterGoal) + ' Dawn comes after round ' + cfg.rounds + '. If pressure reaches ' + cfg.pressureMax + ', ' + T('{C1}') + ' walks out and it ends at once.</li>' +
-      '<li><b>Each round:</b> a Night event, then ' + cfg.actionsPerRound + ' actions (Move, Investigate, Steady, Hold the door [House only], Play a card, Draw). End: +1 pressure for you and for ' + T('{C1}') + ' if in the Treeline; draw 1; hand limit ' + cfg.handLimit + '.</li>' +
-      '<li><b>Tests:</b> ' + cfg.testBase + ' + matching icons on committed cards + Help + a d6 draw (1–3: 0, 4: −1, 5: +1, 6: STAR = fail and +1 pressure). Ties succeed. Beat it by ' + cfg.strongMargin + ' for a strong success.</li>' +
-      '<li><b>Cards:</b> Play for the effect (costs an action) OR commit to a test for icons (free). Never both.</li>' +
-      '<li><b>At the end:</b> spend progress to resolve Threads (full cost). All three also need you to escape together.</li></ul><button class="primary" id="rClose">Close</button>';
-    on('rClose', closeOverlay);
+      '<div class="btns"><button id="sCopyJ"' + tipA(P('ui.copyTip')) + '>' + X('ui.copyJSON') + '</button><button id="sCopyC"' + tipA(P('ui.copyTip')) + '>' + X('ui.copyCSV') + '</button>' +
+      '<button id="sDlJ"' + tipA(P('ui.dlTip')) + '>' + X('ui.dlJSON') + '</button><button id="sDlC"' + tipA(P('ui.dlTip')) + '>' + X('ui.dlCSV') + '</button><button id="sClear"' + tipA(P('ui.clearTip')) + '>' + X('ui.clearStats') + '</button></div>' +
+      '<p class="muted">' + X('ui.statsNote') + '</p><textarea id="sOut" readonly></textarea>', function () {
+      function copy(txt) {
+        document.getElementById('sOut').value = txt;
+        if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function () { flashMsg(P('ui.copied')); }, function () { flashMsg(P('ui.clipBlocked')); });
+        else flashMsg(P('ui.clipBlocked'));
+      }
+      function dl(txt, name, type) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+      function stamp() { return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'); }
+      on('sCopyJ', function () { copy(Stats.toJSON(store.all())); });
+      on('sCopyC', function () { copy(Stats.toCSV(store.all())); });
+      on('sDlJ', function () { dl(Stats.toJSON(store.all()), 'cottage-runs-' + stamp() + '.json', 'application/json'); });
+      on('sDlC', function () { dl(Stats.toCSV(store.all()), 'cottage-runs-' + stamp() + '.csv', 'text/csv'); });
+      on('sClear', function () { if (confirm(P('ui.clearConfirm'))) { store.clear(); openStats(); } });
+    });
   }
 
-  // ---------- Debug panel ----------
+  // ---------- guided Night 1 (coach marks) ----------
+  var STEPS = UT.onboarding.steps;
+  function tutStep() { return U.tut ? STEPS[U.tut.i] : null; }
+  function tutAllows(ctl) { var s = tutStep(); return !s || (s.allow || []).indexOf(ctl) >= 0; }
+  function tutAdvance() {
+    if (!U.tut) return;
+    var s = tutStep();
+    if (s && s.id === 'clue' && U.tray) { U.tray = null; }
+    U.tut.i++;
+    if (U.tut.i >= STEPS.length) { endCoach(); }
+    if (U.screen === 'encounter') renderEncounter();
+  }
+  function tutSignal(sig) {
+    var s = tutStep(); if (!s) return;
+    if (sig === 'trayCancel' && s.id === 'add') { U.tut.i = STEPS.map(function (x) { return x.id; }).indexOf('search'); placeCoach(); return; }
+    if (s.await === sig) tutAdvance();
+  }
+  function endCoach(silent) {
+    if (U.tut && !silent) safeSet(TUT_KEY, '1');
+    U.tut = null; coach.classList.add('hidden'); coach.innerHTML = '';
+  }
+  function skipCoach() {
+    var s = tutStep(); if (U.tutInfo) U.tutInfo.skippedAt = s ? s.id : null;
+    if (U.game) U.game.endTutorial();
+    safeSet(TUT_KEY, '1'); endCoach(true); renderEncounter();
+  }
+  function placeCoach() {
+    var s = tutStep();
+    if (!s || U.screen !== 'encounter') { coach.classList.add('hidden'); return; }
+    var W = window.innerWidth, Hh = window.innerHeight, rects = [];
+    (s.target || []).forEach(function (id) { var e = document.getElementById(id); if (e) { var r = e.getBoundingClientRect(); if (r.width) rects.push(r); } });
+    var zm = document.getElementById('zoom'); if (zm && zm.classList.contains('pinned') && (s.allow || []).some(function (x) { return /^card-/.test(x); })) rects.push(zm.getBoundingClientRect());
+    var holes = rects.map(function (r) { return '<rect x="' + (r.left - 8) + '" y="' + (r.top - 8) + '" width="' + (r.width + 16) + '" height="' + (r.height + 16) + '" rx="10" fill="black"/>'; }).join('');
+    var rings = rects.map(function (r) { return '<div class="coachRing" style="left:' + (r.left - 8) + 'px;top:' + (r.top - 8) + 'px;width:' + (r.width + 16) + 'px;height:' + (r.height + 16) + 'px"></div>'; }).join('');
+    var voice = s.voice ? lineParts(s.voice) : null;
+    var n = U.tut.i + 1;
+    coach.innerHTML = '<svg class="coachShade" width="' + W + '" height="' + Hh + '"><defs><mask id="cm"><rect width="100%" height="100%" fill="white"/>' + holes + '</mask></defs><rect width="100%" height="100%" fill="rgba(5,8,12,.62)" mask="url(#cm)"/></svg>' + rings +
+      '<div class="coachBubble" id="coachBubble"><div class="cstep">' + X('ui.coachStep', { n: n, total: STEPS.length }) + '</div>' +
+      (voice ? '<div class="cvoice">' + (voice.who ? '<b>' + esc(Skin.speaker(voice.who, names())) + ':</b> ' + H(voice.text) : H(voice.narr)) + '</div>' : '') +
+      '<div class="ctext">' + H(s.text, { max: cfg.pressureMax }) + '</div>' +
+      (s.await ? '<div class="ctry">' + X('ui.coachTryIt') + '</div>' : '') +
+      '<div class="cbtns"><button id="coachSkip"' + tipA(P('ui.coachSkipTip')) + '>' + X('ui.coachSkip') + '</button>' +
+      (U.tut.i > 0 && !s.await && !STEPS[U.tut.i - 1].await ? '<button id="coachBack"' + tipA(P('ui.coachBackTip')) + '>' + X('ui.coachBack') + '</button>' : '') +
+      (s.await ? '' : '<button class="primary" id="coachNext"' + tipA(P('ui.coachNextTip')) + '>' + X(n === STEPS.length ? 'ui.coachDone' : 'ui.coachNext') + ' ▸</button>') + '</div></div>';
+    coach.classList.remove('hidden');
+    var b = document.getElementById('coachBubble'), bw = b.offsetWidth, bh = b.offsetHeight, x, y;
+    if (rects.length) {
+      var u = rects.reduce(function (a, r) { return { l: Math.min(a.l, r.left), t: Math.min(a.t, r.top), r: Math.max(a.r, r.right), b: Math.max(a.b, r.bottom) }; }, { l: 1e9, t: 1e9, r: -1e9, b: -1e9 });
+      x = (u.l + u.r) / 2 - bw / 2;
+      y = u.b + 18 + bh < Hh ? u.b + 18 : u.t - 18 - bh;
+      if (y < 8) { y = Math.max(8, (u.t + u.b) / 2 - bh / 2); x = u.r + 18 + bw < W ? u.r + 18 : u.l - 18 - bw; }
+    } else { x = W / 2 - bw / 2; y = Hh / 2 - bh / 2; }
+    b.style.left = Math.max(8, Math.min(W - bw - 8, x)) + 'px'; b.style.top = Math.max(8, Math.min(Hh - bh - 8, y)) + 'px';
+    on('coachNext', function () { tutAdvance(); });
+    on('coachBack', function () { U.tut.i--; renderEncounter(); });
+    on('coachSkip', skipCoach);
+  }
+  // while a coach step is up, only the highlighted controls work (the Menu and the bubble always do)
+  function tutBlock(e) {
+    var s = tutStep(); if (!s || U.screen !== 'encounter') return;
+    var t = e.target;
+    if (t.closest('#coachBubble') || t.closest('#overlay') || t.closest('#btnMenu') || t.closest('#debug')) return;
+    var allow = s.allow || [];
+    if (t.closest('#tray') && allow.indexOf('tray') >= 0) return;
+    var c = t.closest('[data-ctl]');
+    if (c && allow.indexOf(c.dataset.ctl) >= 0) return;
+    e.preventDefault(); e.stopPropagation();
+    var b = document.getElementById('coachBubble'); if (b) { b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); }
+  }
+  document.addEventListener('click', tutBlock, true);
+  document.addEventListener('dragstart', tutBlock, true);
+
+  // ---------- tooltips ----------
+  var tipEl = document.createElement('div'); tipEl.id = 'tip'; tipEl.className = 'tip hidden'; layer.appendChild(tipEl);
+  var tipTimer = null, tipFor = null;
+  document.addEventListener('mouseover', function (e) {
+    var t = e.target.closest && e.target.closest('[data-tip]');
+    if (t === tipFor) return;
+    tipFor = t; clearTimeout(tipTimer); tipEl.classList.add('hidden');
+    if (!t) return;
+    tipTimer = setTimeout(function () {
+      tipEl.textContent = t.getAttribute('data-tip'); tipEl.classList.remove('hidden');
+      var r = t.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+      var y = r.bottom + 8 + h < window.innerHeight ? r.bottom + 8 : r.top - 8 - h;
+      tipEl.style.left = Math.max(6, Math.min(window.innerWidth - w - 6, r.left + r.width / 2 - w / 2)) + 'px'; tipEl.style.top = Math.max(6, y) + 'px';
+    }, 280);
+  });
+
+  // ---------- debug panel ----------
   function renderDebug() {
     if (dbg.classList.contains('hidden')) return;
     var G = U.game;
-    var html = '<b>DEBUG</b> · screen ' + U.screen + ' · skin ' + U.skin + ' · build ' + esc(cfg.version) + '<br>';
+    var html = '<b>DEBUG</b> · screen ' + U.screen + ' · skin ' + U.skin + ' · icons ' + ICON_STYLE + ' · ' + esc(cfg.version) + ' · <button id="dbgBoxes">layout boxes</button><br>' +
+      'rules ' + esc(JSON.stringify(cfg.rules)) + ' · tutorial ' + (U.tut ? STEPS[U.tut.i].id : 'off') + '<br>';
     if (G) {
       var S = G.state;
-      html += 'seed <b>' + S.seed + '</b> · phase ' + S.phase + ' · round ' + S.round + '/' + cfg.rounds + ' · actions ' + S.actionsLeft + '<br>' +
+      html += 'seed <b>' + S.seed + '</b> · phase ' + S.phase + ' · round ' + S.round + '/' + G.cfg.rounds + ' · actions ' + S.actionsLeft + '<br>' +
         'pressure ' + S.pressure + ' (max seen ' + S.maxPressureSeen + ', maxed ' + S.pressureMaxed + ') · progress ' + S.progress + ' (earned ' + S.progressEarned + ')<br>' +
-        'POV ' + cfg.zones[S.pov].name + ' · C1 ' + cfg.zones[S.c1].name + ' (brought back ' + S.c1BroughtBack + ') · bars ' + S.bars + ' · torch ' + S.torch + ' · silence ' + S.silence + '<br>' +
+        'POV ' + G.cfg.zones[S.pov].id + ' · C1 ' + G.cfg.zones[S.c1].id + ' (brought back ' + S.c1BroughtBack + ') · bars ' + S.bars + ' · torch ' + S.torch + ' · silence ' + S.silence + '<br>' +
         'helps c1 ' + (S.helps.c1.used ? 'used' : 'ready') + ' / c2 ' + (S.helps.c2.used ? 'used' : 'ready') + ' · bond ' + S.flags.bond + ' · key ' + S.flags.key + '<br>' +
         'hand [' + S.hand.join(', ') + ']<br>deck [' + S.deck.join(', ') + ']<br>discard [' + S.discard.join(', ') + ']<br>' +
         'night deck [' + S.events.join(', ') + '] · seen [' + S.eventsSeen.join(', ') + ']<br>' +
-        'plays ' + S.stats.plays + ' · commits ' + S.stats.commits + ' · tests ' + S.stats.tests + ' (ok ' + S.stats.testSuccesses + ', stars ' + S.stats.stars + ')<br>' +
+        'plays ' + S.stats.plays + ' · commits ' + S.stats.commits + ' · tests ' + S.stats.tests + ' (ok ' + S.stats.testSuccesses + ', omens ' + S.stats.stars + ')<br>' +
         (S.phase === 'allocate' ? 'legal allocations: ' + G.legalAllocations().map(function (a) { return '[' + a.join('+') + ']'; }).join(' ') + '<br>' : '') +
         (S.result ? 'result ' + esc(JSON.stringify(S.result)) + '<br>' : '') +
         '<div class="log">' + S.log.slice().reverse().map(function (l) { return '<div class="' + l.kind + '">R' + l.round + ' ' + esc(l.text) + '</div>'; }).join('') + '</div>';
     } else html += 'No encounter yet.';
     dbg.innerHTML = html;
+    on('dbgBoxes', function () { document.body.classList.toggle('showLayout'); if (U.screen === 'encounter') renderEncounter(); });
   }
   function toggleDebug() { dbg.classList.toggle('hidden'); renderDebug(); }
 
-  on('btnDebug', toggleDebug);
-  on('btnStats', openStats);
-  on('btnRules', openRules);
-  on('btnRestart', function () { if (U.screen === 'title' || confirm('Restart? The current run will not be saved.')) { closeOverlay(); U.game = null; U.seed = null; document.getElementById('seedLabel').textContent = ''; renderTitle(); } });
   document.addEventListener('keydown', function (e) {
     if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
     if (e.key === 'd' || e.key === 'D') toggleDebug();
-    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) { closeOverlay(); U.test = null; }
+    if (e.key === 'Escape') { if (!overlay.classList.contains('hidden')) closeOverlay(); else if (U.pinned) closeZoom(); else if (U.tray && !U.tray.result && !U.tut) { U.tray = null; renderEncounter(); } }
+    if ((e.key === ' ' || e.key === 'Enter') && (U.screen === 'vn' || U.screen === 'outro') && document.getElementById('bNext') && overlay.classList.contains('hidden')) { e.preventDefault(); vnNext(); }
   });
+  window.__ui = { U: U, fmt: fmt, P: P, cardHTML: cardHTML, questionCardHTML: questionCardHTML, renderEncounter: function () { renderEncounter(); } }; // for tests / audits
 
+  fit();
   renderTitle();
 })();

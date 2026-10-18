@@ -18,7 +18,9 @@
     // supporting detail
     'endReason', 'totalSeconds', 'actionsTaken', 'startProgress', 'progressAtEnd', 'progressSpent', 'progressLost', 'threadsOpen', 'T1', 'T2', 'T3',
     'maxPressure', 'pressureByRound', 'progressByRound', 'bondChoice', 'finalBondC1', 'finalBondC2', 'beat3Visited',
-    'tests', 'testSuccesses', 'stars', 'cardsPlayed', 'cardsCommitted', 'actionCounts'];
+    'tests', 'testSuccesses', 'stars', 'cardsPlayed', 'cardsCommitted', 'actionCounts',
+    // v0.2: rule set, tutorial, unused actions, per-night detail
+    'rules', 'tutorial', 'unusedActions', 'perRound'];
 
   function buildRecord(game, meta) {
     var S = game.state, R = S.result, cfg = game.cfg;
@@ -40,7 +42,14 @@
       encounterSeconds: meta.encounterSeconds, totalSeconds: meta.totalSeconds,
       outcomeScene: meta.outcomeScene || '', playsVsCommits: S.stats.plays + ':' + S.stats.commits,
       secondsPerRound: secondsPerRound(S), povLeftHouse: S.povLeftHouse ? 'Y' : 'N', c1EverOutside: S.c1EverOutside ? 'Y' : 'N',
-      c1EndedOutside: S.c1 > 0 ? 'Y' : 'N', finalBondC1: R.finalBondC1, finalBondC2: R.finalBondC2
+      c1EndedOutside: S.c1 > 0 ? 'Y' : 'N', finalBondC1: R.finalBondC1, finalBondC2: R.finalBondC2,
+      rules: Object.keys(cfg.rules || {}).filter(function (k) { return cfg.rules[k]; }).join('+'),
+      tutorial: meta.tutorial || (S.tutorial ? 'Y' : 'N'),
+      unusedActions: S.roundsPlayed * cfg.actionsPerRound - actions,
+      // one entry per night: n<round>:<action counts>|p<plays>c<commits>h<helps>|D<dread>|C<clues>|<pov>/<c1>
+      perRound: (S.perRound || []).map(function (r) {
+        return 'n' + r.round + ':' + (Object.keys(r.actions).map(function (k) { return k + r.actions[k]; }).join('.') || '-') + '|p' + r.plays + 'c' + r.commits + 'h' + r.helps + '|D' + r.dread + '|C' + r.clues + '|' + r.pov + '/' + r.c1;
+      }).join(' ')
     };
   }
 

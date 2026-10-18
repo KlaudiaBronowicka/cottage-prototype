@@ -9,6 +9,9 @@
  * A value that starts with "the " brings its own article ("The {HOST}" → "The landlady").
  * Line format:  { who: 'C1', text: '...' }   (who = slot key or null for narration)
  *               { narr: '...' }               (stage direction / narration)
+ *               question: 'T1'                (optional: slide that Question card in on this line)
+ * [square brackets] = stage direction, rendered in italics, never as dialogue.
+ * UI strings (buttons, tooltips, tutorial, recap): data/ui-text.js
  * ===================================================================== */
 var VN_TEXT = {
   SKINS: {
@@ -41,6 +44,14 @@ var VN_TEXT = {
       { narr: 'Dinner. Pierogi from the village shop, burned slightly. Rain on the window. The fire in the stove ticks.' },
       { who: 'C2', text: 'Rule for tonight: nobody goes out. Nobody opens the door.' }
     ], choices: ['bond', 'key'] },
+    // End of Beat 4, just before the lights fail (Zosia, tutorial copy). `question` slides that Question card in as the line is spoken.
+    { scene: 'Beat 4 · Evening', lines: [
+      { who: 'C2',  text: 'Right. Three questions, and then nobody opens that door. One: what is circling the house?', question: 'T1' },
+      { who: 'C2',  text: '[gently, looking right at her] Two: what is {C1} hiding?', question: 'T2' },
+      { who: 'C1',  text: '[turning her phone face down] Pass.' },
+      { who: 'C2',  text: "Three: why are we here, in this exact cottage? [The {POV}'s hand goes to {OBJECT}.]", question: 'T3' },
+      { who: 'POV', text: "We don't need every answer tonight. We just need to make it to dawn." }
+    ]},
     { scene: 'Night two', lines: [
       { narr: "Late. The lights flicker and fail. Footsteps outside, slow, circling. Then a voice from the yard — the {POV}'s own voice — calling {C1} by name." },
       { who: 'C1',  text: "(already on her feet) That's you. That's your voice." },

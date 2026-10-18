@@ -34,8 +34,9 @@ function botStep(g, rng, style) {
   var helpSome = function (stat) { var h = eligibleHelps(g, stat); return style === 'smart' ? (S.round >= 4 ? h : []) : h.filter(function () { return rng() < 0.3; }); };
   options.push(function () { return g.investigate({ commits: commitSome('INSIGHT'), helps: helpSome('INSIGHT') }); });
   options.push(function () { return g.steady({ commits: commitSome('CARE'), helps: helpSome('CARE') }); });
-  if (S.pov === 0) options.push(function () { return g.holdDoor({ commits: commitSome('NERVE'), helps: helpSome('NERVE') }); });
-  if (S.deck.length) options.push(function () { return g.drawAction(); });
+  var hasAct = function (a) { return g.cfg.uiActions.indexOf(a) >= 0; }; // rule set v0.2 cuts Draw and Hold the door
+  if (S.pov === 0 && hasAct('holdDoor')) options.push(function () { return g.holdDoor({ commits: commitSome('NERVE'), helps: helpSome('NERVE') }); });
+  if (S.deck.length && hasAct('draw')) options.push(function () { return g.drawAction(); });
   S.hand.forEach(function (id) {
     if (!g.canPlay(id).ok) return;
     options.push(function () {
@@ -57,7 +58,8 @@ function botStep(g, rng, style) {
     if ((id = playIf('progressObject') || playIf('progress'))) return g.play(id);
     if (S.pov === 0 && (id = playIf('investigateYardFromHouse'))) return g.play(id, { commits: matching(g, 'INSIGHT', id), helps: eligibleHelps(g, 'INSIGHT') });
     if ((id = playIf('investigateAnyZone'))) return g.play(id, { zone: 2, commits: matching(g, 'INSIGHT', id), helps: eligibleHelps(g, 'INSIGHT') });
-    if (S.pov === 0 && S.round < 6 && S.bars === 0 && rng() < 0.3) return g.holdDoor({ commits: matching(g, 'NERVE') });
+    if ((id = playIf('placeBar')) && S.round < 6 && rng() < 0.5) return g.play(id);
+    if (S.pov === 0 && S.round < 6 && S.bars === 0 && g.cfg.uiActions.indexOf('holdDoor') >= 0 && rng() < 0.3) return g.holdDoor({ commits: matching(g, 'NERVE') });
     return g.investigate({ commits: matching(g, 'INSIGHT'), helps: S.round >= 5 ? eligibleHelps(g, 'INSIGHT') : [] });
   }
   return pick(rng, options)();
@@ -87,7 +89,7 @@ function playOne(seed, style, allocMode, opts) {
     if (S.phase === 'actions' && S.round !== round) assert(S.hand.length <= cfg.handLimit, 'hand limit after round end');
     // play-or-commit-never-both: total cards conserved
     var total = S.deck.length + S.hand.length + S.discard.length + S.removed.length;
-    assert.strictEqual(total, cfg.deck.length, 'card conservation');
+    assert.strictEqual(total, g.cfg.deck.length, 'card conservation');
     assert(S.bars <= 1, 'max 1 Bar');
   }
   assert.strictEqual(S.phase, 'allocate');
@@ -118,13 +120,15 @@ function playOne(seed, style, allocMode, opts) {
 var outcomes = {}, ends = {}, n = 0, styles = ['random', 'smart', 'reckless'];
 var progressSum = { smart: 0, random: 0 }, cnt = { smart: 0, random: 0 };
 var store = new Stats.Store('test', null);
+// rule set v0.2 (default, all flags ON) for most seeds; every 5th seed plays the kit v0.1 rules (all flags OFF) so both stay working
+var LEGACY = Object.assign({}, CONFIG, { rules: { cutDrawAndHold: false, endTurnButton: false, startZeroClues: false, chairForPierogi: false } });
 for (var seed = 1; seed <= 4000; seed++) {
   var style = styles[seed % 3];
-  var g = playOne(seed, style, seed % 2 ? 'random' : 'max');
+  var g = playOne(seed, style, seed % 2 ? 'random' : 'max', { cfg: seed % 5 === 0 ? LEGACY : CONFIG });
   n++;
   outcomes[g.state.result.outcome] = (outcomes[g.state.result.outcome] || 0) + 1;
   ends[g.state.endReason] = (ends[g.state.endReason] || 0) + 1;
-  if (progressSum[style] != null) { progressSum[style] += g.state.progressEarned + CONFIG.startProgress; cnt[style]++; }
+  if (progressSum[style] != null) { progressSum[style] += g.state.progressEarned + g.cfg.startProgress; cnt[style]++; }
   if (seed <= 50) store.add(Stats.buildRecord(g, { runId: 'r' + seed, outcomeScene: TXT.outcomes[g.state.result.outcome].title, encounterSeconds: 0, totalSeconds: 0 }));
 }
 // faster variant: cards removed for unvisited spots
@@ -171,9 +175,40 @@ assert.deepStrictEqual(a.state.log, b.state.log, 'seeded runs are deterministic'
   S.hand = ['rule', 'kompot']; S.deck = S.deck.filter(function (x) { return S.hand.indexOf(x) < 0; }); S.pov = 0; S.actionsLeft = 2;
   S.bars = 1;
   assert(!g.canPlay('rule').ok, "Mother's Rule blocked while a Bar is down");
-  var r = g.holdDoor({}); assert(!r.ok && /stack/.test(r.error), 'Hold the door blocked while a Bar is down');
   assert.strictEqual(S.actionsLeft, 2, 'blocked action costs nothing');
+  var gl = Engine.createGame(LEGACY, { seed: 11 }); gl.state.pov = 0; gl.state.bars = 1;
+  var r = gl.holdDoor({}); assert(!r.ok && /stack/.test(r.error), 'Hold the door (v0.1 rules) blocked while a Bar is down');
 })();
+// RULE SET v0.2 (approved): Draw + Hold the door cut, start at 0 clues, Chair Under the Handle replaces Burnt Pierogi
+(function () {
+  var g = Engine.createGame(CONFIG, { seed: 21 }), S = g.state, ids = g.cfg.deck.map(function (c) { return c.id; });
+  assert.strictEqual(S.progress, 0, 'starts at 0 clues'); assert.strictEqual(ids.length, 12, '12-card deck');
+  assert(ids.indexOf('chair') >= 0 && ids.indexOf('pierogi') < 0, 'Chair replaces Burnt Pierogi');
+  assert.deepStrictEqual(g.cfg.uiActions, ['move', 'investigate', 'steady', 'play'], 'action list after cuts');
+  assert(!g.drawAction().ok && !g.holdDoor({}).ok, 'Draw and Hold the door rejected'); assert.strictEqual(S.actionsLeft, 2);
+  S.hand = ['chair', 'rule']; S.deck = S.deck.filter(function (x) { return S.hand.indexOf(x) < 0; });
+  assert(g.play('chair').ok && S.bars === 1, 'Chair places a Bar'); assert(!g.canPlay('rule').ok, 'max 1 Bar');
+  assert.strictEqual(g.cfg.chairCard.icons.join(''), 'N', 'Chair is a NERVE card');
+  assert(CONFIG.deck.some(function (c) { return c.id === 'pierogi'; }), 'base config untouched (flag can be switched off)');
+  // Comfort: EVERY success lowers Dread by 1 (strong: 1 more) and calls COMPANION 1 one step in
+  S.pressure = 3; S.c1 = 2; S.actionsLeft = 2; var r = g.steady({ roll: 1 }).test; assert(r.success && !r.strong);
+  assert.strictEqual(S.pressure, 2); assert.strictEqual(S.c1, 1);
+  // the feed names the cause of every change (for the UI)
+  var last = S.feed[S.feed.length - 1]; assert.strictEqual(last.type, 'pressure'); assert.strictEqual(last.src.type, 'comfort');
+})();
+// guided Night 1: fixed first event + starting cards, first roll succeeds; skipping stops the rig
+(function () {
+  for (var sd = 1; sd <= 200; sd++) {
+    var g = Engine.createGame(CONFIG, { seed: sd, tutorial: true }), S = g.state;
+    assert.strictEqual(S.lastEvent.id, CONFIG.tutorialEvent); assert.strictEqual(S.pressure, 1, 'Footsteps raised Dread to 1');
+    CONFIG.tutorialHand.forEach(function (id) { assert(S.hand.indexOf(id) >= 0, 'tutorial hand has ' + id); });
+    assert(g.investigate({}).test.success, 'tutorial first Search succeeds (seed ' + sd + ')');
+  }
+  var g2 = Engine.createGame(CONFIG, { seed: 3, tutorial: true }); g2.endTutorial(); assert(g2.state.tutorialRollRigged && g2.state.tutorialSkipped);
+})();
+// Question costs (Narrative Writer's sentences: Being 3, Companion 4, Past 2)
+assert.deepStrictEqual(CONFIG.threads.map(function (t) { return t.cost; }), [3, 4, 2], 'Question costs match the tutorial copy');
+
 // RULED: Photos (House only, Yard) and Key (any zone -> any zone) cost 1 action incl. the test
 (function () {
   var g = Engine.createGame(CONFIG, { seed: 12 }); var S = g.state;
@@ -210,10 +245,12 @@ runs.forEach(function (r) {
   Stats.COLUMNS.forEach(function (c) { assert(r[c] !== undefined, 'stats field present: ' + c); });
   KIT_FIELDS.forEach(function (c) { assert(Stats.COLUMNS.indexOf(c) >= 0, 'kit field in CSV: ' + c); });
   assert(r.outcomeScene, 'outcome scene recorded');
+  assert(/^n1:/.test(r.perRound), 'per-night detail recorded'); assert(r.rules !== undefined);
 });
 var csv = Stats.toCSV(runs), json = JSON.parse(Stats.toJSON(runs));
 assert.strictEqual(csv.trim().split('\n').length, runs.length + 1, 'csv rows');
 assert.strictEqual(json.runs.length, 50);
+require('fs').writeFileSync(__dirname + '/sample-stats.csv', csv); require('fs').writeFileSync(__dirname + '/sample-stats.json', Stats.toJSON(runs)); // example exports for the README
 
 console.log('Played ' + n + ' encounters without errors.');
 console.log('Outcomes:', JSON.stringify(outcomes));

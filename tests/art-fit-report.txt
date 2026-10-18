@@ -1,0 +1,14 @@
+== viewport 1280x720 (stage scale 0.667) ==
+Overflowing boxes: 
+  OVERFLOW stage dread.label_box box "dread.label_box": text needs 25px, box has 13px
+  OVERFLOW stage help.text box "help.text": text needs 21px, box has 32px
+  OVERFLOW stage help.text box "help.text": text needs 21px, box has 32px
+Card effect text on screen: hand 5.6px, zoom 15.0px (artist note: min 14px)
+Card name on screen in hand: 7.9px
+== viewport 1920x1080 (stage scale 1.000) ==
+Overflowing boxes: 
+  OVERFLOW stage dread.label_box box "dread.label_box": text needs 25px, box has 13px
+  OVERFLOW stage help.text box "help.text": text needs 21px, box has 32px
+  OVERFLOW stage help.text box "help.text": text needs 21px, box has 32px
+Card effect text on screen: hand 8.4px, zoom 15.0px (artist note: min 14px)
+Card name on screen in hand: 11.8px

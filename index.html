@@ -3,26 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Cottage — encounter prototype (greybox)</title>
+<title>The Cottage — encounter prototype</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header id="topbar">
-  <span class="brand">THE COTTAGE · greybox prototype</span>
-  <span id="seedLabel" class="muted"></span>
-  <span class="spacer"></span>
-  <button id="btnRules" title="Quick rules">Rules</button>
-  <button id="btnStats" title="Run stats (saved in this browser)">Stats</button>
-  <button id="btnDebug" title="Toggle debug panel (key: D)">Debug</button>
-  <button id="btnRestart" title="Back to the start">Restart</button>
-</header>
-<main id="app"></main>
+<div id="stageWrap"><div id="stage"></div></div>
+<div id="layer"></div>
+<div id="coach" class="hidden"></div>
 <aside id="debug" class="hidden"></aside>
 <div id="overlay" class="hidden"><div id="overlayBox"></div></div>
-<!-- load order: tuning, text, engine, stats, UI -->
+<!-- load order: tuning, text, art + layout data, engine, helpers, UI -->
 <script src="config.js"></script>
 <script src="data/vn-text.js"></script>
+<script src="data/ui-text.js"></script>
+<script src="assets/manifest.js"></script>
+<script src="data/board-layout.js"></script>
 <script src="game.js"></script>
+<script src="odds.js"></script>
 <script src="stats.js"></script>
 <script src="skin.js"></script>
 <script src="ui.js"></script>

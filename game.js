@@ -33,8 +33,18 @@
    *  opts.key         'SHARED' | 'KEPT'    (Beat 4 choice 2)
    *  opts.visited     ['3a','3b','3c']     (Beat 3 spots; faster variant removes unvisited cards)
    */
+  /** Apply the rule flags in cfg.rules to a copy of the config (approved v0.2 rules; each can be switched off). */
+  function effectiveConfig(base) {
+    var cfg = Object.assign({}, base), r = base.rules || {};
+    if (r.startZeroClues) cfg.startProgress = 0;
+    if (r.chairForPierogi) cfg.deck = base.deck.map(function (c) { return c.id === 'pierogi' ? base.chairCard : c; });
+    cfg.uiActions = (base.uiActions || []).filter(function (a) { return !(r.cutDrawAndHold && (a === 'draw' || a === 'holdDoor')); });
+    return cfg;
+  }
+
   function createGame(cfg, opts) {
     opts = opts || {};
+    cfg = effectiveConfig(cfg);
     var seed = (opts.seed == null ? Math.floor(Math.random() * 1e9) : opts.seed) >>> 0;
     var rng = makeRng(seed);
     var zoneIds = cfg.zones.map(function (z) { return z.id; });
@@ -60,6 +70,9 @@
       silence: false,
       helps: { c1: { used: false, uses: 0 }, c2: { used: false, uses: 0 } },
       flags: { bond: opts.bond || 'C1', key: opts.key || 'SHARED', visited: opts.visited || ['3a', '3b', '3c'] },
+      tutorial: !!opts.tutorial, tutorialRollRigged: false,
+      feed: [],                // structured, player-facing event feed: {round, type, delta, from, to, src}
+      perRound: [],            // per-night logging (actions, plays, commits, helps, dread, positions)
       stats: { plays: 0, commits: 0, tests: 0, testSuccesses: 0, stars: 0, actions: {}, cardsPlayed: [], cardsCommitted: [], pressureByRound: [], progressByRound: [] },
       endReason: null,         // 'dawn' | 'pressure'
       roundsPlayed: 0,
@@ -75,11 +88,13 @@
     function zoneName(i) { return cfg.zones[i].name; }
     function ended() { return S.phase === 'allocate' || S.phase === 'done'; }
 
-    function changePressure(delta, why) {
+    // src: {type:'event'|'card'|'omen'|'comfort'|'exposurePOV'|'exposureC1', id?} — lets the UI name the cause
+    function changePressure(delta, why, src) {
       if (ended() || !delta) return;
       var before = S.pressure;
       S.pressure = Math.max(cfg.pressureMin, Math.min(cfg.pressureMax, S.pressure + delta));
       S.maxPressureSeen = Math.max(S.maxPressureSeen, S.pressure);
+      if (S.pressure !== before) S.feed.push({ round: S.round, type: 'pressure', delta: S.pressure - before, from: before, to: S.pressure, src: src || {} });
       log('Pressure ' + before + ' → ' + S.pressure + ' (' + why + ')', delta > 0 ? 'bad' : 'good');
       if (S.pressure >= cfg.pressureMax) earlyEnd();
     }
@@ -92,7 +107,13 @@
       enterAllocate();
     }
     function enterAllocate() { S.endedAt = now(); S.phase = 'allocate'; S.actionsLeft = 0; snapshotRound(); }
-    function snapshotRound() { S.stats.pressureByRound.push(S.pressure); S.stats.progressByRound.push(S.progress); }
+    function snapshotRound() {
+      S.stats.pressureByRound.push(S.pressure); S.stats.progressByRound.push(S.progress);
+      var rs = S._roundStart || { actions: {}, plays: 0, commits: 0, helps: 0 }, acts = {};
+      Object.keys(S.stats.actions).forEach(function (k) { var d = S.stats.actions[k] - (rs.actions[k] || 0); if (d) acts[k] = d; });
+      S.perRound.push({ round: S.round, actions: acts, plays: S.stats.plays - rs.plays, commits: S.stats.commits - rs.commits,
+        helps: S.helps.c1.uses + S.helps.c2.uses - rs.helps, dread: S.pressure, clues: S.progress, c1: zoneIds[S.c1], pov: zoneIds[S.pov] });
+    }
 
     function drawCards(n, why) {
       var got = 0;
@@ -103,16 +124,17 @@
       if (got) log('Drew ' + got + ' card(s)' + (why ? ' (' + why + ')' : '') + '.');
       return got;
     }
-    function moveC1(delta, why) {
+    function moveC1(delta, why, src) {
       var before = S.c1;
       S.c1 = Math.max(0, Math.min(zoneIds.length - 1, S.c1 + delta));
       if (S.c1 !== before) {
+        S.feed.push({ round: S.round, type: 'c1', delta: S.c1 - before, from: before, to: S.c1, src: src || {} });
         if (S.c1 < before) S.c1BroughtBack = true;
         if (S.c1 > 0) S.c1EverOutside = true;
         log('COMPANION 1: ' + zoneName(before) + ' → ' + zoneName(S.c1) + ' (' + why + ')', delta > 0 ? 'bad' : 'good');
       }
     }
-    function gainProgress(n, why) { S.progress += n; S.progressEarned += n; log('+' + n + ' progress (' + why + '). Total ' + S.progress + '.', 'good'); }
+    function gainProgress(n, why, src) { S.feed.push({ round: S.round, type: 'progress', delta: n, from: S.progress, to: S.progress + n, src: src || {} }); S.progress += n; S.progressEarned += n; log('+' + n + ' progress (' + why + '). Total ' + S.progress + '.', 'good'); }
 
     // ---------- Setup ----------
     function setup() {
@@ -127,6 +149,11 @@
       }
       S.deck = rng.shuffle(ids);
       S.events = rng.shuffle(cfg.events.map(function (e) { return e.id; }));
+      if (S.tutorial) { // guided Night 1 (Clarity Pass 9.3): fixed first event and fixed cards in the starting hand
+        (cfg.tutorialHand || []).slice().reverse().forEach(function (id) { var i = S.deck.indexOf(id); if (i >= 0) { S.deck.splice(i, 1); S.deck.unshift(id); } });
+        var ei = S.events.indexOf(cfg.tutorialEvent); if (ei >= 0) { S.events.splice(ei, 1); S.events.unshift(cfg.tutorialEvent); }
+        log('Tutorial: fixed first event (' + cfg.tutorialEvent + ') and starting cards (' + (cfg.tutorialHand || []).join(', ') + ').');
+      }
       log('Seed ' + seed + '. Bond: ' + S.flags.bond + ', key: ' + S.flags.key + '. Pressure ' + S.pressure + ', progress ' + S.progress + '.');
       drawCards(cfg.startingHand, 'starting hand');
       startRound();
@@ -135,6 +162,7 @@
     // ---------- Round ----------
     function startRound() {
       S.round++;
+      S._roundStart = { actions: Object.assign({}, S.stats.actions), plays: S.stats.plays, commits: S.stats.commits, helps: S.helps.c1.uses + S.helps.c2.uses };
       S.roundStartedAt.push(now());
       S.torch = 0; S.silence = false;
       S.actionsLeft = cfg.actionsPerRound;
@@ -148,13 +176,13 @@
       S.eventsSeen.push(evId);
       S.lastEvent = { id: evId, cancelled: false };
       if (S.bars > 0) {
-        S.bars--; S.lastEvent.cancelled = true;
+        S.bars--; S.lastEvent.cancelled = true; S.feed.push({ round: S.round, type: 'barUsed', src: { type: 'event', id: evId } });
         log('NIGHT: ' + ev.name + ' — cancelled by a Bar (Bars left: ' + S.bars + ').', 'good');
         return;
       }
       log('NIGHT: ' + ev.name, 'event');
       if (ev.onlyIfPOVOutside && S.pov === 0) { log('POV is in the House — no effect.'); return; }
-      if (ev.c1Out) moveC1(ev.c1Out, ev.name);
+      if (ev.c1Out) moveC1(ev.c1Out, ev.name, { type: 'event', id: ev.id });
       if (ev.discardRandom) {
         for (var k = 0; k < ev.discardRandom && S.hand.length; k++) {
           var idx = rng.int(S.hand.length); var lost = S.hand.splice(idx, 1)[0]; S.discard.push(lost);
@@ -162,15 +190,15 @@
         }
       }
       if (ev.noEndDraw) S.silence = true;
-      if (ev.pressure) changePressure(ev.pressure, ev.name);
+      if (ev.pressure) changePressure(ev.pressure, ev.name, { type: 'event', id: ev.id });
     }
 
     function endRound() {
       if (S.phase !== 'actions') return;
       // END: exposure
-      if (S.pov === zoneIds.length - 1 && cfg.exposurePOV) changePressure(cfg.exposurePOV, 'POV in the Treeline');
+      if (S.pov === zoneIds.length - 1 && cfg.exposurePOV) changePressure(cfg.exposurePOV, 'POV in the Treeline', { type: 'exposurePOV' });
       if (ended()) return;
-      if (S.c1 === zoneIds.length - 1 && cfg.exposureC1) changePressure(cfg.exposureC1, 'COMPANION 1 in the Treeline');
+      if (S.c1 === zoneIds.length - 1 && cfg.exposureC1) changePressure(cfg.exposureC1, 'COMPANION 1 in the Treeline', { type: 'exposureC1' });
       if (ended()) return;
       if (S.silence) log('Silence: no end-of-round draw.');
       else drawCards(1, 'end of round');
@@ -221,6 +249,10 @@
       commits.forEach(function (id) { S.hand.splice(S.hand.indexOf(id), 1); S.discard.push(id); S.stats.commits++; S.stats.cardsCommitted.push(id); });
       helps.forEach(function (w) { S.helps[w].used = true; S.helps[w].uses++; });
       var roll = forcedRoll || (rng.int(6) + 1);
+      if (!forcedRoll && S.tutorial && !S.tutorialRollRigged) { // guided Night 1: the first roll succeeds if it can (not shown to the player)
+        S.tutorialRollRigged = true;
+        for (var fr = 1; fr <= cfg.testBag.length; fr++) { var ft = cfg.testBag[fr - 1]; if (ft !== 'STAR' && pv.preDraw + ft >= difficulty) { roll = fr; break; } }
+      }
       var tok = cfg.testBag[roll - 1];
       var star = tok === 'STAR';
       var total = pv.preDraw + (star ? 0 : tok);
@@ -231,7 +263,7 @@
       S.lastTest = r;
       log(label + ' [' + stat + ' vs ' + difficulty + ']: base ' + pv.base + ' + icons ' + pv.icons + ' + help ' + pv.help + ' + draw ' + (star ? 'STAR' : (tok >= 0 ? '+' + tok : tok)) + ' (d6=' + roll + ') = ' + (star ? 'AUTO-FAIL' : total) + ' → ' + (star ? 'FAIL (STAR)' : strong ? 'STRONG SUCCESS' : success ? 'success' : 'fail'), success ? 'good' : 'bad');
       if (helps.length) helps.forEach(function (w) { log('Help used: ' + (w === 'c1' ? 'COMPANION 1' : 'COMPANION 2') + ' (+' + helpBonus(w) + ').'); });
-      if (star) changePressure(cfg.starPressure, 'STAR');
+      if (star) changePressure(cfg.starPressure, 'STAR', { type: 'omen' });
       return r;
     }
 
@@ -260,7 +292,7 @@
       if (S.torch) log('Torch: difficulty ' + z.investigateDifficulty + ' → ' + diff + '.');
       S.torch = 0;
       var r = runTest(label + ' (' + z.name + ')', 'INSIGHT', diff, commits, helps, forcedRoll);
-      if (r.success && !ended()) gainProgress(z.progress + (r.strong ? cfg.strongInvestigateBonus : 0), 'Investigate ' + z.name + (r.strong ? ', strong' : ''));
+      if (r.success && !ended()) gainProgress(z.progress + (r.strong ? cfg.strongInvestigateBonus : 0), 'Investigate ' + z.name + (r.strong ? ', strong' : ''), { type: 'search', id: z.id, strong: r.strong });
       return r;
     }
 
@@ -290,12 +322,15 @@
         spend('steady');
         var r = runTest('Steady', 'CARE', cfg.steadyDifficulty, o.commits, o.helps, o.roll);
         if (r.success && !ended()) {
-          moveC1(-1, 'Steady');
-          changePressure(-(cfg.steadyPressureRelief + (r.strong ? cfg.strongSteadyBonus : 0)), 'Steady' + (r.strong ? ', strong' : ''));
+          // Comfort/Steady: EVERY success lowers pressure (steadyPressureRelief) and calls COMPANION 1 one zone in;
+          // a strong success lowers it by strongSteadyBonus more. (Matches the v0.2 sim fix.)
+          moveC1(-1, 'Steady', { type: 'comfort' });
+          changePressure(-(cfg.steadyPressureRelief + (r.strong ? cfg.strongSteadyBonus : 0)), 'Steady' + (r.strong ? ', strong' : ''), { type: 'comfort', strong: r.strong });
         }
         return ok({ test: r });
       },
       holdDoor: function (o) {
+        if (cfg.rules && cfg.rules.cutDrawAndHold) return err('Hold the door is not in this rule set.');
         o = o || {}; var e = needAction() || badCommits(o); if (e) return err(e);
         if (zoneIds[S.pov] !== cfg.holdDoorZone) return err('Hold the door only works in the House.');
         if (!cfg.barsStack && S.bars > 0) return err('A Bar is already down — Bars do not stack (max 1).');
@@ -305,6 +340,7 @@
         return ok({ test: r });
       },
       drawAction: function () {
+        if (cfg.rules && cfg.rules.cutDrawAndHold) return err('Draw is not in this rule set.');
         var e = needAction(); if (e) return err(e);
         if (!S.deck.length) return err('Deck is empty.'); // RULED (Kostka 2026-10-18) (confirmed): Draw with an empty deck is not allowed (no reshuffle)
         spend('draw'); drawCards(1, 'Draw action'); return ok();
@@ -334,19 +370,19 @@
           case 'investigateAnyZone':
             var zi = p.zone == null ? S.pov : p.zone;
             res.test = doInvestigate(zi, c.name, p.commits, p.helps, p.roll); break;
-          case 'placeBar': S.bars++; log('Bar placed (Bars: ' + S.bars + ').', 'good'); break;
-          case 'progressObject': gainProgress(S.flags.key === 'SHARED' ? c.valueShared : c.value, c.name + (S.flags.key === 'SHARED' ? ', SHARED' : '')); break;
-          case 'progress': gainProgress(c.value, c.name); break;
+          case 'placeBar': S.bars++; S.feed.push({ round: S.round, type: 'bar', delta: 1, src: { type: 'card', id: c.id } }); log('Bar placed (Bars: ' + S.bars + ').', 'good'); break;
+          case 'progressObject': gainProgress(S.flags.key === 'SHARED' ? c.valueShared : c.value, c.name + (S.flags.key === 'SHARED' ? ', SHARED' : ''), { type: 'card', id: c.id }); break;
+          case 'progress': gainProgress(c.value, c.name, { type: 'card', id: c.id }); break;
           case 'torch': S.torch = c.value; log('Next Investigate this round: -' + c.value + ' difficulty.'); break;
-          case 'c1Home': if (S.c1 > 0) moveC1(-S.c1, c.name); else log('COMPANION 1 is already in the House.'); break;
-          case 'pressure': changePressure(c.value, c.name); break;
+          case 'c1Home': if (S.c1 > 0) moveC1(-S.c1, c.name, { type: 'card', id: c.id }); else log('COMPANION 1 is already in the House.'); break;
+          case 'pressure': changePressure(c.value, c.name, { type: 'card', id: c.id }); break;
           case 'draw': drawCards(c.value, c.name); break;
           case 'readyHelp':
             var w = p.helpToReady || (S.helps.c1.used ? 'c1' : 'c2');
             if (S.helps[w].used) { S.helps[w].used = false; log((w === 'c1' ? 'COMPANION 1' : 'COMPANION 2') + "'s Help is ready again.", 'good'); }
             else log('No used Help to ready.');
             break;
-          case 'c1InwardAndCalm': moveC1(-1, c.name); changePressure(c.value, c.name); break;
+          case 'c1InwardAndCalm': moveC1(-1, c.name, { type: 'card', id: c.id }); changePressure(c.value, c.name, { type: 'card', id: c.id }); break;
           default: log('Unknown effect ' + c.effect, 'warn');
         }
         return res;
@@ -358,6 +394,8 @@
         endRound(); return ok();
       },
       discardDown: discardDown,
+      /** the player skipped the guided Night 1: stop any tutorial rigging */
+      endTutorial: function () { if (S.tutorial) { S.tutorialSkipped = !S.tutorialRollRigged; S.tutorialRollRigged = true; log('Tutorial closed.'); } },
 
       // ---------- Scoring ----------
       escapedTogether: function () { return !S.pressureMaxed && S.c1 === 0; },
@@ -426,6 +464,6 @@
     return api;
   }
 
-  var Engine = { createGame: createGame, makeRng: makeRng, STAT_OF_ICON: STAT_OF_ICON, ICON_OF_STAT: ICON_OF_STAT };
+  var Engine = { createGame: createGame, effectiveConfig: effectiveConfig, makeRng: makeRng, STAT_OF_ICON: STAT_OF_ICON, ICON_OF_STAT: ICON_OF_STAT };
   if (typeof module !== 'undefined') module.exports = Engine; else root.Engine = Engine;
 })(this);

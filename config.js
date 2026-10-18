@@ -7,11 +7,11 @@
  * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
  * ===================================================================== */
 var CONFIG = {
-  version: 'kit-v0.1 / build 1',
+  version: 'kit-v0.1 + rules v0.2 / build 2',
 
   // ---------- Setup ----------
   startPressure: 0,          // pressure token starts here
-  startProgress: 1,          // [T] "what you learned during the day"
+  startProgress: 1,          // [T] "what you learned during the day" (rules.startZeroClues overrides to 0)
   startingHand: 5,           // [T] cards drawn at setup
   handLimit: 6,              // hand limit, checked at END of round (discard down)
   rounds: 6,                 // [T] DAWN after this many rounds
@@ -48,7 +48,7 @@ var CONFIG = {
   // ---------- Bars ----------
   barsStack: false,          // RULED (Kostka 2026-10-18): Bars do NOT stack — max 1 Bar on the board; Hold the door / Mother's Rule are greyed out while one is down
 
-  // ---------- Companion Help (each usable once; Burnt Pierogi readies one) ----------
+  // ---------- Companion Help (each usable once; Burnt Pierogi readies one, if it is in the deck) ----------
   helpBonus: 2,              // [T] +2 to a test
   helpBonusBonded: 3,        // [T] +3 if her bond rose in Beat 4
   helps: {
@@ -71,21 +71,22 @@ var CONFIG = {
   allThreadsNeedEscapedTogether: true,
 
   // ---------- Player deck (12 cards, fixed; no reshuffle when empty) ----------
+  // name/text here are INTERNAL labels for the debug log. Player-facing card names, rules text and flavour: data/ui-text.js
   // icons: I = INSIGHT, N = NERVE, C = CARE. Committing gives +1 per matching icon.
   // effect: key handled in game.js; value = effect amount where relevant.
   deck: [
-    { id: 'photos',   name: 'Footprint Photos',  icons: ['I','I'], effect: 'investigateYardFromHouse', text: 'Investigate the Yard without leaving the House.', flavour: "{C2}'s photos, zoomed in until they are all pixels." },
-    { id: 'rule',     name: "Mother's Rule",     icons: ['N'],     effect: 'placeBar',          text: 'Place a Bar: cancel the next Night event.', flavour: '"Shut the gate after dark. Because I said so."', beat3: '3a' },
-    { id: 'object',   name: 'The Object',        icons: ['I'],     effect: 'progressObject', value: 1, valueShared: 2, text: 'Gain 1 progress. If key choice = SHARED, gain 2 instead.', flavour: 'Family handwriting, naming this exact cottage.', beat3: '3c' },
-    { id: 'torch',    name: 'Torch',             icons: ['I','N'], effect: 'torch', value: 1,   text: 'Your next Investigate this round is 1 difficulty easier.', flavour: 'The beam stops exactly where the trees begin.' },
-    { id: 'blanket',  name: 'Thick Blanket',     icons: ['C','C'], effect: 'c1Home',            text: '{C1} returns to the House.', flavour: 'The {HOST} brought the thick one. Wrap her in it.' },
-    { id: 'kompot',   name: 'Kompot',            icons: ['C'],     effect: 'pressure', value: -1, text: 'Pressure -1.', flavour: '"For the guests. Don\'t waste it."' },
-    { id: 'story',    name: "The Host's Story",  icons: ['I','N'], effect: 'progress', value: 1, text: 'Gain 1 progress.', flavour: '"Something walks round a house to keep it. Or to be let in."' },
-    { id: 'phone',    name: 'Phone at 4%',       icons: ['I'],     effect: 'draw', value: 2,    text: 'Draw 2 cards.', flavour: "One bar of signal. One message you shouldn't read." },
-    { id: 'pierogi',  name: 'Burnt Pierogi',     icons: ['C','N'], effect: 'readyHelp',         text: "One companion's used Help becomes ready again.", flavour: 'Slightly burned. Still the best thing tonight.' },
-    { id: 'key',      name: 'Key on a String',   icons: ['N'],     effect: 'investigateAnyZone', text: 'Investigate any zone without moving there.', flavour: "The {HOST}'s key, warm from your pocket." },
-    { id: 'stove',    name: 'Stove Fire',        icons: ['N','C'], effect: 'pressure', value: -2, text: 'Pressure -2.', flavour: 'Feed it. Keep it ticking. Keep it bright.' },
-    { id: 'later',    name: '"Later, Properly"', icons: ['C','I'], effect: 'c1InwardAndCalm', value: -1, text: 'No test: {C1} moves one zone toward the House and pressure -1.', flavour: '"Can I tell you later? Properly. Not here."', beat3: '3b' }
+    { id: 'photos',   name: 'Footprint Photos',  icons: ['I','I'], effect: 'investigateYardFromHouse', text: 'Investigate the Yard without leaving the House.' },
+    { id: 'rule',     name: "Mother's Rule",     icons: ['N'],     effect: 'placeBar',          text: 'Place a Bar: cancel the next Night event.', beat3: '3a' },
+    { id: 'object',   name: 'The Object',        icons: ['I'],     effect: 'progressObject', value: 1, valueShared: 2, text: 'Gain 1 progress. If key choice = SHARED, gain 2 instead.', beat3: '3c' },
+    { id: 'torch',    name: 'Torch',             icons: ['I','N'], effect: 'torch', value: 1,   text: 'Your next Investigate this round is 1 difficulty easier.' },
+    { id: 'blanket',  name: 'Thick Blanket',     icons: ['C','C'], effect: 'c1Home',            text: '{C1} returns to the House.' },
+    { id: 'kompot',   name: 'Kompot',            icons: ['C'],     effect: 'pressure', value: -1, text: 'Pressure -1.' },
+    { id: 'story',    name: "The Host's Story",  icons: ['I','N'], effect: 'progress', value: 1, text: 'Gain 1 progress.' },
+    { id: 'phone',    name: 'Phone at 4%',       icons: ['I'],     effect: 'draw', value: 2,    text: 'Draw 2 cards.' },
+    { id: 'pierogi',  name: 'Burnt Pierogi',     icons: ['C','N'], effect: 'readyHelp',         text: "One companion's used Help becomes ready again." },
+    { id: 'key',      name: 'Key on a String',   icons: ['N'],     effect: 'investigateAnyZone', text: 'Investigate any zone without moving there.' },
+    { id: 'stove',    name: 'Stove Fire',        icons: ['N','C'], effect: 'pressure', value: -2, text: 'Pressure -2.' },
+    { id: 'later',    name: '"Later, Properly"', icons: ['C','I'], effect: 'c1InwardAndCalm', value: -1, text: 'No test: {C1} moves one zone toward the House and pressure -1.', beat3: '3b' }
   ],
   // RULED (Kostka 2026-10-18): Footprint Photos = 1 action total incl. its Investigate test; POV must be in the House; investigates the Yard.
   //   Key on a String = 1 action total incl. its test; usable from any zone, on any zone (no setting needed).
@@ -112,11 +113,34 @@ var CONFIG = {
   fasterVariant: false,
   beat3SpotsToVisit: 2,      // used only when fasterVariant = true
 
+  // ---------- Rule set v0.2 (Clarity Pass, APPROVED by Klaudia via Tomek, 2026-10-18) ----------
+  // Each change is a flag so it can be switched back. All ON = approved default.
+  rules: {
+    cutDrawAndHold: true,   // remove the Draw and Hold the door actions (4 actions: Move, Search, Comfort, Play a card)
+    endTurnButton: true,    // explicit "End turn" button (actions are optional); OFF = old "End round" button
+    startZeroClues: true,   // start with 0 clues instead of startProgress
+    chairForPierogi: true   // replace Burnt Pierogi with Chair Under the Handle (below); drops the "ready a used Help" rule
+  },
+  chairCard: { id: 'chair', name: 'Chair Under the Handle', icons: ['N'], effect: 'placeBar', text: 'Place a Bar: cancel the next Night event.' },
+  // Guided Night 1 (tutorial): fixed first event and these cards on top of the deck (INSIGHT card + calming card).
+  tutorialEvent: 'footsteps',
+  tutorialHand: ['story', 'kompot'],
+  // Outcome recap (Narrative Writer): the COMPANION 2 line always shows; the extra tag lines only when this is ON.
+  recapTagLines: false,
+
+  // ---------- UI action list (data-driven) ----------
+  // Which actions the action bar offers, in order ('play' = Play a card; End turn is always shown).
+  // rules.cutDrawAndHold removes 'draw' and 'holdDoor' from this list (and from the engine). Remove an id here to hide it.
+  // Adding cards to a roll is a step inside the roll dialog, not an action.
+  uiActions: ['move', 'investigate', 'steady', 'play', 'holdDoor', 'draw'],
+
   // ---------- Prototype / tooling ----------
   // RULED (Kostka 2026-10-18): Outcome 3 from DAWN with 0-1 Threads and Escaped together = Y uses the 'stayed together, little learned'
   //   variant 'Outcome 3b · Dawn, Together' (outcome code '3b'; Narrative Writer's text in data/vn-text.js).
   outcome3StayedVariant: true,
 
+  iconStyle: 'colour',       // 'colour' = the artist's coloured icons (default) · 'mono' = one-colour icons. URL ?icons=mono overrides.
+  hintsNight2: true,         // Clarity Pass 4.4: one hint line on Night 2 (players can hide it from the Menu)
   defaultSkin: 'neutral',    // name set from data/vn-text.js: 'neutral' (CAPS slots), 'A', 'B', 'C'. URL ?skin=A overrides.
   statsStorageKey: 'cottageProto.runs.v1'
 };
