@@ -222,15 +222,18 @@ if (typeof module !== 'undefined') module.exports = CONFIG;
  * Source: "Cottage Encounter — Paper Prototype Outline" + kit section 4.
  * Swap any line freely. Tokens {POV} {C1} {C2} {HOST} {BEING} {OBJECT}
  * are replaced from the active name set in SKINS (URL ?skin=A|B|C).
+ * Write slots the way the default CAPS text reads ("the HOST", "The POV's"). Slots listed in a skin's
+ * `proper` are proper names, so skin.js drops the article in front of them ("The {HOST}" → "Wanda").
+ * A value that starts with "the " brings its own article ("The {HOST}" → "The landlady").
  * Line format:  { who: 'C1', text: '...' }   (who = slot key or null for narration)
  *               { narr: '...' }               (stage direction / narration)
  * ===================================================================== */
 var VN_TEXT = {
   SKINS: {
     neutral: { POV: 'POV', C1: 'COMPANION 1', C2: 'COMPANION 2', HOST: 'HOST', BEING: 'the BEING', OBJECT: 'the OBJECT' },
-    A: { POV: 'Hania', C1: 'Ola',    C2: 'Kinga', HOST: 'Wanda',     BEING: 'the domowik', OBJECT: "Irena's address book" },
-    B: { POV: 'Ewa',   C1: 'Marta',  C2: 'Iga',   HOST: 'the landlady', BEING: 'the zmora', OBJECT: "Julia's photo" },
-    C: { POV: 'Agata', C1: 'Dorota', C2: 'Lena',  HOST: 'the caretaker', BEING: 'the Licho', OBJECT: "Leokadia's notebook" }
+    A: { POV: 'Hania', C1: 'Ola',    C2: 'Kinga', HOST: 'Wanda',     BEING: 'the domowik', OBJECT: "Irena's address book", proper: ['POV', 'C1', 'C2', 'HOST', 'OBJECT'] },
+    B: { POV: 'Ewa',   C1: 'Marta',  C2: 'Iga',   HOST: 'the landlady', BEING: 'the zmora', OBJECT: "Julia's photo",       proper: ['POV', 'C1', 'C2', 'OBJECT'] },
+    C: { POV: 'Agata', C1: 'Dorota', C2: 'Lena',  HOST: 'the caretaker', BEING: 'the Licho', OBJECT: "Leokadia's notebook", proper: ['POV', 'C1', 'C2', 'OBJECT'] }
   },
 
   title: 'The Cottage — encounter prototype',
@@ -913,6 +916,38 @@ if (typeof module !== 'undefined') module.exports = VN_TEXT;
 </script>
 <script>
 /* =====================================================================
+ * skin.js — name-slot substitution for VN text ({POV}, {HOST}, ...).
+ * Handles the article in front of a slot, so reskinned text stays grammatical:
+ *   proper name  (listed in the skin's `proper`):  "the {HOST}" → "Wanda", "The {POV}'s" → "Hania's"
+ *   own article  (value starts with "the "):        "The {HOST}" → "The landlady", "the {BEING}" → "the domowik"
+ *   plain noun   (anything else, e.g. default CAPS): left exactly as written → "the HOST", "The POV's"
+ * Runs in browser and node.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function applySkin(str, skin) {
+    skin = skin || {};
+    var proper = skin.proper || [];
+    return String(str == null ? '' : str).replace(/\b(the|The) \{([A-Z0-9]+)\}|\{([A-Z0-9]+)\}/g, function (m, art, k1, k2) {
+      var key = k1 || k2, val = skin[key];
+      if (typeof val !== 'string') return m;            // unknown slot: leave untouched
+      var isProper = proper.indexOf(key) >= 0, ownArticle = /^the /i.test(val);
+      if (!art) return val;                              // bare {SLOT}
+      if (isProper) return val;                          // drop "the"/"The" before a proper name (names are already capitalised)
+      if (ownArticle) return art === 'The' ? cap(val) : val; // value brings its own article; keep the template's case
+      return art + ' ' + val;                            // plain noun: keep the template's article as written
+    });
+  }
+  // Speaker label for a slot (capitalised so "the landlady" shows as "The landlady").
+  function speaker(key, skin) { var v = skin && skin[key]; return typeof v === 'string' ? cap(v) : key; }
+  var Skin = { applySkin: applySkin, speaker: speaker };
+  if (typeof module !== 'undefined') module.exports = Skin; else root.Skin = Skin;
+})(this);
+
+</script>
+<script>
+/* =====================================================================
  * ui.js — greybox DOM UI. All rules live in game.js; numbers in config.js;
  * text in data/vn-text.js. This file only renders and routes clicks.
  * ===================================================================== */
@@ -939,7 +974,7 @@ if (typeof module !== 'undefined') module.exports = VN_TEXT;
 
   // ---------- helpers ----------
   function names() { return TXT.SKINS[U.skin] || TXT.SKINS.neutral; }
-  function t(s) { var n = names(); return String(s == null ? '' : s).replace(/\{(\w+)\}/g, function (m, k) { return n[k] != null ? n[k] : m; }); }
+  function t(s) { return Skin.applySkin(s, names()); } // article-aware slot substitution (skin.js)
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function T(s) { return esc(t(s)); }
   function el(html) { var d = document.createElement('div'); d.innerHTML = html; return d; }
@@ -1004,7 +1039,7 @@ if (typeof module !== 'undefined') module.exports = VN_TEXT;
   function dirs(html) { return html.replace(/\[([^\]]*)\]/g, '<em class="dir">$1</em>'); }
   function lineHTML(l) {
     if (l.narr) return '<div class="narr">' + dirs(T(l.narr)) + '</div>';
-    return '<div class="who">' + esc(names()[l.who] || l.who) + '</div><div>' + dirs(T(l.text)) + '</div>';
+    return '<div class="who">' + esc(Skin.speaker(l.who, names())) + '</div><div>' + dirs(T(l.text)) + '</div>';
   }
   function renderVN() {
     var st = U.steps[U.stepIdx];

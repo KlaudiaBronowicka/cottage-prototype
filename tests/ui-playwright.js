@@ -25,6 +25,7 @@ var url = 'file://' + path.resolve(__dirname, '..', 'index.html');
       for (var i = 0; i < 80; i++) {
         if (await page.$('#inSeed')) break;
         if (await page.$('.zones')) break;
+        if (run === 0) { var vt = await page.textContent('#app'); if (/\b[Tt]he (Hania|Ola|Kinga|Wanda|Irena)\b|\bthe the\b/i.test(vt)) errors.push('skin grammar (intro): ' + vt.slice(0, 120)); }
         var choice = await page.$('.choices button');
         if (choice) { await choice.click(); continue; }
         var next = await page.$('#bNext');
@@ -59,6 +60,7 @@ var url = 'file://' + path.resolve(__dirname, '..', 'index.html');
     await page.waitForSelector('#bAgain');
     var title = await page.textContent('.vn .scene');
     var vnText = await page.textContent('.vn');
+    if (run === 0 && /\b[Tt]he (Hania|Ola|Kinga|Wanda|Irena)\b|\bthe the\b/i.test(vnText)) errors.push('skin grammar (outro): ' + title);
     if (/\[|\]/.test(vnText)) errors.push('unrendered [stage direction] brackets in outro: ' + title);
     if (/Dawn, Together/.test(title) && !(await page.$('.vn em.dir'))) errors.push('3b stage directions not italic');
     outcomes[title] = (outcomes[title] || 0) + 1;

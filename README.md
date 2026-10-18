@@ -44,6 +44,11 @@ Every gameplay number is in **`config.js`**, with comments. The kit's [T] values
 
 All VN text is in **`data/vn-text.js`**: intro, choices, event flavour, pressure bands, Thread questions, outcome scenes and inserts. The writer can swap lines there without touching code. Tokens such as `{C1}` are filled in from the name set.
 
+**Writing slots:** write them the way the default CAPS text reads, for example "the {HOST}" or "The {POV}'s". `skin.js` handles the article:
+- Each skin lists its proper names in `proper`. The article in front of those is dropped: "The {HOST} explains" becomes "Wanda explains", and "the {POV}'s lap" becomes "Hania's lap".
+- A value that starts with "the " brings its own article: "The {HOST}" becomes "The landlady", never "The the landlady".
+- Anything else, including the default CAPS names, is left exactly as written.
+
 ## File map
 | File | What |
 |---|---|
@@ -54,7 +59,9 @@ All VN text is in **`data/vn-text.js`**: intro, choices, event flavour, pressure
 | `game.js` | Pure rules engine (no DOM) with a seeded RNG (mulberry32). Runs in browser and node |
 | `stats.js` | Per-run stats records, localStorage store, JSON/CSV export |
 | `ui.js` | DOM rendering and input only |
+| `skin.js` | Article-aware name substitution for `?skin=A/B/C` |
 | `tests/smoke.js` | Headless engine test: `node tests/smoke.js` |
+| `tests/skin-test.js` | Name-grammar test: `node tests/skin-test.js` |
 | `tests/ui-playwright.js` | Optional browser click-through. Needs `playwright-core` and Chrome |
 | `tools/bundle.py` | Builds `dist/cottage-prototype.html` (single file) |
 
@@ -64,7 +71,8 @@ All VN text is in **`data/vn-text.js`**: intro, choices, event flavour, pressure
   - Targeted rule checks: Bar cancels, no Bar stacking (and blocked actions cost nothing), STAR, ties, Help eligibility, early end, the 1-Thread cap, Photos and Key action cost and zones, final-bond inserts, and Outcome 3b plus its inserts.
   - Also asserts that all 6 outcomes and both end reasons are reached, and that every stats column is present in the CSV/JSON export.
   - Last run: all passed. Outcomes: 1: 227, 2a: 315, 2b: 324, 2c: 81, 3: 2376, 3b: 677. These are bot numbers, not balance data.
-- `NODE_PATH=<dir with playwright-core>/node_modules node tests/ui-playwright.js /usr/bin/google-chrome` clicks through 12 full runs in headless Chrome.
+- `node tests/skin-test.js` runs targeted name-grammar cases, then renders every VN and card string through every skin (788 renders). For skins A, B and C it asserts there is no article before a proper name, no "the the" and no unreplaced slot. For the default CAPS text it asserts the output is unchanged.
+- `NODE_PATH=<dir with playwright-core>/node_modules node tests/ui-playwright.js /usr/bin/google-chrome` clicks through 12 full runs in headless Chrome. The first run uses skin A and is checked for article-before-name errors in the intro and outro.
   - Covers the intro and skip paths, allocation, outro, and stats download.
   - Checks that stage-direction brackets render in italics and that the CSV header has the kit fields.
   - Last run: passed with 0 console errors, and Outcomes 3, 3b and 2b were seen.

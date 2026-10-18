@@ -25,7 +25,7 @@
 
   // ---------- helpers ----------
   function names() { return TXT.SKINS[U.skin] || TXT.SKINS.neutral; }
-  function t(s) { var n = names(); return String(s == null ? '' : s).replace(/\{(\w+)\}/g, function (m, k) { return n[k] != null ? n[k] : m; }); }
+  function t(s) { return Skin.applySkin(s, names()); } // article-aware slot substitution (skin.js)
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function T(s) { return esc(t(s)); }
   function el(html) { var d = document.createElement('div'); d.innerHTML = html; return d; }
@@ -90,7 +90,7 @@
   function dirs(html) { return html.replace(/\[([^\]]*)\]/g, '<em class="dir">$1</em>'); }
   function lineHTML(l) {
     if (l.narr) return '<div class="narr">' + dirs(T(l.narr)) + '</div>';
-    return '<div class="who">' + esc(names()[l.who] || l.who) + '</div><div>' + dirs(T(l.text)) + '</div>';
+    return '<div class="who">' + esc(Skin.speaker(l.who, names())) + '</div><div>' + dirs(T(l.text)) + '</div>';
   }
   function renderVN() {
     var st = U.steps[U.stepIdx];

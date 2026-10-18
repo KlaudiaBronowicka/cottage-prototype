@@ -4,15 +4,18 @@
  * Source: "Cottage Encounter — Paper Prototype Outline" + kit section 4.
  * Swap any line freely. Tokens {POV} {C1} {C2} {HOST} {BEING} {OBJECT}
  * are replaced from the active name set in SKINS (URL ?skin=A|B|C).
+ * Write slots the way the default CAPS text reads ("the HOST", "The POV's"). Slots listed in a skin's
+ * `proper` are proper names, so skin.js drops the article in front of them ("The {HOST}" → "Wanda").
+ * A value that starts with "the " brings its own article ("The {HOST}" → "The landlady").
  * Line format:  { who: 'C1', text: '...' }   (who = slot key or null for narration)
  *               { narr: '...' }               (stage direction / narration)
  * ===================================================================== */
 var VN_TEXT = {
   SKINS: {
     neutral: { POV: 'POV', C1: 'COMPANION 1', C2: 'COMPANION 2', HOST: 'HOST', BEING: 'the BEING', OBJECT: 'the OBJECT' },
-    A: { POV: 'Hania', C1: 'Ola',    C2: 'Kinga', HOST: 'Wanda',     BEING: 'the domowik', OBJECT: "Irena's address book" },
-    B: { POV: 'Ewa',   C1: 'Marta',  C2: 'Iga',   HOST: 'the landlady', BEING: 'the zmora', OBJECT: "Julia's photo" },
-    C: { POV: 'Agata', C1: 'Dorota', C2: 'Lena',  HOST: 'the caretaker', BEING: 'the Licho', OBJECT: "Leokadia's notebook" }
+    A: { POV: 'Hania', C1: 'Ola',    C2: 'Kinga', HOST: 'Wanda',     BEING: 'the domowik', OBJECT: "Irena's address book", proper: ['POV', 'C1', 'C2', 'HOST', 'OBJECT'] },
+    B: { POV: 'Ewa',   C1: 'Marta',  C2: 'Iga',   HOST: 'the landlady', BEING: 'the zmora', OBJECT: "Julia's photo",       proper: ['POV', 'C1', 'C2', 'OBJECT'] },
+    C: { POV: 'Agata', C1: 'Dorota', C2: 'Lena',  HOST: 'the caretaker', BEING: 'the Licho', OBJECT: "Leokadia's notebook", proper: ['POV', 'C1', 'C2', 'OBJECT'] }
   },
 
   title: 'The Cottage — encounter prototype',
