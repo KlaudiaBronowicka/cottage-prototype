@@ -43,7 +43,7 @@ var GOAL = 'Goal: Find ' + CONFIG.v04.clueGoal + ' Clues before dawn (' + CONFIG
     n++;
   }
   await page.goto(url + '?seed=7'); await shot('01-intro');
-  assert(/v0\.4\.1/.test(await page.textContent('.buildtag')), 'build label v0.4.1');
+  assert(/v0\.4\.2 .*build 8/.test(await page.textContent('.buildtag')), 'build label v0.4.2 / build 8');
 
   // 2) the 10-step tutorial
   await page.goto(url + '?seed=7&tutorial=1'); await page.click('#bStart'); await page.waitForTimeout(2800);

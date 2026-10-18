@@ -17,16 +17,16 @@ Zone strips (stage y): house 728-768 w650 art, yard 728-768 w740 art, treeline 7
 Zone strip art (natural px): house 650x40 ok, yard 740x40 ok, treeline 470x40 ok
 Tokens: You token inside its zone box and clear of the zone strip in all 3 zones
 Hour 5 late_nights_banner: fits; visit_warning: fits; sky_late_overlay on
-Coach step 1 (goal, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 2 (event, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 3 (creature, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 4 (search, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 5 (move, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 6 (end, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 7 (warning, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 8 (search2, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 9 (bread, hint_line): 120 of 120px fits, text 12.7 screen px
-Coach step 10 (handoff, tutorial_modal): 360 of 360px fits, text 13.3 screen px
+Coach step 1 (goal, hint_line): 120 of 120px fits, text 14.0 screen px, 2 line(s)
+Coach step 2 (event, hint_line): 120 of 120px fits, text 14.0 screen px, 2 line(s)
+Coach step 3 (creature, hint_line): 120 of 120px fits, text 14.0 screen px, 3 line(s)
+Coach step 4 (search, hint_line): 120 of 120px fits, text 14.0 screen px, 2 line(s)
+Coach step 5 (move, hint_line): 120 of 120px fits, text 14.0 screen px, 2 line(s)
+Coach step 6 (end, hint_line): 120 of 120px fits, text 14.0 screen px, 1 line(s)
+Coach step 7 (warning, hint_line): 120 of 120px fits, text 14.0 screen px, 2 line(s)
+Coach step 8 (search2, hint_line): 120 of 120px fits, text 14.0 screen px, 1 line(s)
+Coach step 9 (bread, hint_line): 120 of 120px fits, text 14.0 screen px, 2 line(s)
+Coach step 10 (handoff, tutorial_modal): 360 of 360px fits, text 14.0 screen px, 3 line(s)
 skip_tutorial button: fits
 End win (win_1280x720.webp): title fits 48px, result_line fits, play_again fits, play_with_tutorial fits; stats_row y420-616 800x196 fits; run_stats y432-540 752x108 fits; send_results y548-604 300x56 fits
 End lose_dread (dread_1280x720.webp): title fits 48px, result_line fits, play_again fits, play_with_tutorial fits; stats_row y420-616 800x196 fits; run_stats y432-540 752x108 fits; send_results y548-604 300x56 fits
@@ -50,16 +50,16 @@ Zone strips (stage y): house 728-768 w650 art, yard 728-768 w740 art, treeline 7
 Zone strip art (natural px): house 650x40 ok, yard 740x40 ok, treeline 470x40 ok
 Tokens: You token inside its zone box and clear of the zone strip in all 3 zones
 Hour 5 late_nights_banner: fits; visit_warning: fits; sky_late_overlay on
-Coach step 1 (goal, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 2 (event, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 3 (creature, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 4 (search, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 5 (move, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 6 (end, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 7 (warning, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 8 (search2, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 9 (bread, hint_line): 120 of 120px fits, text 19.0 screen px
-Coach step 10 (handoff, tutorial_modal): 360 of 360px fits, text 20.0 screen px
+Coach step 1 (goal, hint_line): 120 of 120px fits, text 21.0 screen px, 2 line(s)
+Coach step 2 (event, hint_line): 120 of 120px fits, text 21.0 screen px, 2 line(s)
+Coach step 3 (creature, hint_line): 120 of 120px fits, text 21.0 screen px, 3 line(s)
+Coach step 4 (search, hint_line): 120 of 120px fits, text 21.0 screen px, 2 line(s)
+Coach step 5 (move, hint_line): 120 of 120px fits, text 21.0 screen px, 2 line(s)
+Coach step 6 (end, hint_line): 120 of 120px fits, text 21.0 screen px, 1 line(s)
+Coach step 7 (warning, hint_line): 120 of 120px fits, text 21.0 screen px, 2 line(s)
+Coach step 8 (search2, hint_line): 120 of 120px fits, text 21.0 screen px, 1 line(s)
+Coach step 9 (bread, hint_line): 120 of 120px fits, text 21.0 screen px, 2 line(s)
+Coach step 10 (handoff, tutorial_modal): 360 of 360px fits, text 21.0 screen px, 3 line(s)
 skip_tutorial button: fits
 End win (win.webp): title fits 72px, result_line fits, play_again fits, play_with_tutorial fits; stats_row y420-616 800x196 fits; run_stats y432-540 752x108 fits; send_results y548-604 300x56 fits
 End lose_dread (dread.webp): title fits 72px, result_line fits, play_again fits, play_with_tutorial fits; stats_row y420-616 800x196 fits; run_stats y432-540 752x108 fits; send_results y548-604 300x56 fits

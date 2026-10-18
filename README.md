@@ -12,7 +12,7 @@ Sources: rules *Cottage Paper Prototype Kit v0.1* plus the approved **rule set v
 - **End:** win / Dread hit 6 / Dawn came short, on Ola's end screens, with Play again / Play with tutorial and the run stats.
 - **URL:** `?v04=0|1`, `?presence=A|B` (direction; intro line 3 swaps), `?presence=off`, `?footprints=1` (fallback), `?late=`, `?seed=`, `?tutorial=1|0`.
 - **Config:** `CONFIG.v04` holds every v0.4 number and flag (`clueGoal`, `presence.*`, `fallbackPresence`, `tutorial`, `wardNeedsTarget`, `shortcutEitherWay`). Text: `data/ui-text.js → v04`.
-- **Tests:** `node tests/v04-test.js`; `NODE_PATH=<playwright-core>/node_modules node tests/ui-playwright-v04.js [chrome] [--shots]` (screenshots `screenshots/v04-*.png`). Sim: `node tools/sim-v04.js 5000 11 [--pyquirk]`. Art fit: `node tools/art-fit-v04.js`.
+- **Tests:** `node tests/v04-test.js`; `NODE_PATH=… node tests/tutorial-touch-playwright.js [chrome] [--shots]` (v0.4.2: tutorial on desktop clicks + Pixel 7 taps); `NODE_PATH=<playwright-core>/node_modules node tests/ui-playwright-v04.js [chrome] [--shots]` (screenshots `screenshots/v04-*.png`). Sim: `node tools/sim-v04.js 5000 11 [--pyquirk]`. Art fit: `node tools/art-fit-v04.js`.
 - **Notes:** sim parity table, questions for Tomek, copy gaps and art-fit notes for Ola are in `docs/v04-notes.md`.
 
 ## How to run
@@ -202,3 +202,6 @@ The rest of the observation sheet needs a human observer: hesitation, reading th
 **v0.3 additions:** `presenceMode` (off/track, `token>track` when it falls back), `presenceDirection`, `presenceByNight`, `presenceVisits`, `presenceVisitsBlocked`, `barHeldForVisit` (v0.3.1), `offeringsPlayed` (Bread and Salt), `comfortPushes`, `searchPulls`, `presenceSteps`, `presenceClosest`; `perRound` entries end with `|P<position>`.
 
 **v0.2 additions:** `rules` (active rule flags), `tutorial` (Y / N / `skipped@<step>`), `unusedActions`, `perRound` (one entry per night: `n<night>:<action counts>|p<plays>c<adds>h<helps>|D<dread>|C<clues>|<pov zone>/<C1 zone>`).
+
+## Phones (v0.4.2 note)
+The game is a fixed 1920×1080 stage scaled to fit the window. Coach text is 21px on the stage, which is 14px on screen at 1280×720 and larger above that. On a phone the stage gets much smaller: Pixel 7 portrait is about 0.21× (coach text ~4.5px, buttons ~35×9px), and landscape is about 0.38× (~8px). The tutorial works with taps (`tests/tutorial-touch-playwright.js`), but a desktop or laptop is the intended way to play. Landscape is the least bad option on a phone.

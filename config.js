@@ -7,7 +7,7 @@
  * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
  * ===================================================================== */
 var CONFIG = {
-  version: 'v0.4.1 Stripped Core (on kit-v0.1 + rules v0.2 + v0.3.2) / build 7',
+  version: 'v0.4.2 Stripped Core (on kit-v0.1 + rules v0.2 + v0.3.2) / build 8',
 
   // ---------- Setup ----------
   startPressure: 0,          // pressure token starts here
@@ -217,7 +217,10 @@ var CONFIG = {
       guidedHours: 2,
       events: ['footsteps', 'knocking', 'draught'],
       hand: ['rummage', 'shortcut', 'bread', 'bar', 'deepBreath'],
-      safeRolls: true       // guided rolls never show a bad omen or a -1 (the lesson always works)
+      safeRolls: true,      // guided rolls never show a bad omen or a -1 (the lesson always works); the roll window shows those odds (v0.4.2)
+      // v0.4.2 (Ola): coach text size on the 1920 stage. 21 = 14px at 1280x720. Text never shrinks below this: a step that
+      // needs more than maxLines in the 120px hint_line is listed for a copy cut (tools/art-fit-v04.js), not squeezed.
+      coachFont: { stagePx: 21, lineHeight: 1.25, maxLines: 3 }
     },
     // GAP (Tomek): Ward with the creature already at the trees has nothing to push. true = can't be played then (simplest UX); false = playable, no effect
     wardNeedsTarget: true,

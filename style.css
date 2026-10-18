@@ -473,6 +473,12 @@ textarea { width: 100%; height: 100px; background: #0b0c0e; color: var(--paper);
 .hud.nightc.v04 { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; box-sizing: border-box; }
 .hud.nightc.v04 .moons { margin: 0; } .hud.nightc.v04 .nlabel { white-space: nowrap; }
 .endScreen .endBtn { box-sizing: border-box; }
-#coach.v04:not(.modal) .coachBubble { padding: .35em .8em; } #coach.v04:not(.modal) .coachBubble .ctext { line-height: 1.18; }
+#coach.v04:not(.modal) .coachBubble { padding: .35em .8em; row-gap: 0; }
+/* v0.4.2 (Ola): every line of coach text at the full coach size (21px on the 1920 stage = 14px at 1280), line-height 1.25;
+   the step label and "your turn" share the first row, the text gets 3 lines in the 120px hint_line */
+#coach.v04 .coachBubble .cstep, #coach.v04 .coachBubble .ctry, #coach.v04 .coachBubble .ctext, #coach.v04 .coachBubble button { font-size: 1em; line-height: inherit; }
+#coach.v04 .coachBubble .cstep { letter-spacing: .04em; } #coach.v04 .coachBubble .cstep .ctry { text-transform: none; letter-spacing: 0; margin: 0; }
+#coach.v04.modal .coachBubble .ctext { font-size: 1.35em; }
+.face.off { opacity: .3; filter: grayscale(1); }
 .hud.nightc.v04 { gap: 10px; padding: 0 14px; } .hud.nightc.v04 .moons { gap: 6px; } .hud.nightc.v04 .moon .ic { width: 40px; height: 40px; }
 .hud.deck .dlbl { line-height: 1.25; margin-top: 8px; } /* v0.4.1 deck box is 210 tall */

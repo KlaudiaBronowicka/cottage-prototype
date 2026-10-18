@@ -55,7 +55,7 @@
       if (v.noStory) cfg.noStory = true;
       cfg.turnName = v.turnName || 'hour';
       var t = v.tutorial || {};
-      cfg.tutorialHand = t.hand || []; cfg.tutorialEvents = t.events || []; cfg.tutorialSafeRolls = !!t.safeRolls; cfg.tutorialGuidedHours = t.guidedHours || 0;
+      cfg.tutorialHand = t.hand || []; cfg.tutorialEvents = t.events || []; cfg.tutorialSafeRolls = !!t.safeRolls; cfg.tutorialGuidedHours = t.guidedHours || 0; cfg.tutorialCoachFont = t.coachFont || null;
       cfg.chairCard = null;
     }
     cfg.presence = pr;

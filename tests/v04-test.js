@@ -115,4 +115,23 @@ t('text: Zosia intro verbatim (neutral, A, B) + Goal line from config', function
   assert.ok(/\{goal\}/.test(I.goal) && /\{max\}/.test(I.goal) && /\{total\}/.test(I.goal), 'goal line numbers come from config');
   assert.strictEqual(UT.v04.onboarding.steps.length, 10);
 });
+t('v0.4.2 guided rolls: generic magnifier gate + real (safe-face) odds', function () {
+  var Odds = require('../odds.js');
+  var st = UT.v04.onboarding.steps, byId = {}; st.forEach(function (s) { byId[s.id] = s; });
+  assert.strictEqual(byId.search.await, 'roll:icon', 'step 4 accepts any magnifier card (coach text says "a card with a magnifier")');
+  assert.strictEqual(byId.search2.await, 'roll:icon', 'step 8 accepts any magnifier card (v0.4.1 insisted on Shortcut: Klaudia soft-lock)');
+  st.forEach(function (s) { assert.ok(!/^roll:(?!icon$)/.test(s.await || ''), 'no step gates on one card id: ' + s.id); });
+  assert.strictEqual(UT.v04.rollNeedsIcon, 'Add a {stat} card to the {t.TERM_ROLL} first, then roll.');
+  // total 3 vs need 3: 4 of 6 faces in a normal roll (67%), 4 of 4 safe faces in a guided roll (100%)
+  assert.strictEqual(Odds.pct(Odds.testOdds(CONFIG, 3, 3).p), 67);
+  var g = Odds.testOdds(CONFIG, 3, 3, { guided: true });
+  assert.strictEqual(Odds.pct(g.p), 100); assert.strictEqual(g.pStar, 0); assert.strictEqual(g.faces.filter(function (f) { return f.off; }).length, 2);
+  assert.strictEqual(Odds.pct(Odds.testOdds(CONFIG, 2, 3, { guided: true }).p), 25, 'no card added on the Yard: only the +1 face wins');
+  // the engine's guided roll matches: every safe face equally likely, never STAR / -1
+  var game = Engine.createGame(CONFIG, { seed: 3, tutorial: true }), S = game.state, seen = {};
+  for (var i = 0; i < 4000; i++) { S.actionsLeft = 2; S.phase = 'actions'; S.pov = 1; S.torch = 0; S.pressure = 0; S.hand = ['luckyFind']; var r = game.investigate({ commits: ['luckyFind'] }).test; seen[r.roll] = (seen[r.roll] || 0) + 1; assert.ok(r.success, 'guided 3 vs 3 always succeeds'); }
+  assert.ok(!seen[4] && !seen[6], 'no -1 / omen face in a guided roll');
+  [1, 2, 3, 5].forEach(function (f) { assert.ok(Math.abs(seen[f] / 4000 - 0.25) < 0.04, 'safe face ' + f + ' ~25%: ' + seen[f]); });
+  assert.strictEqual(CONFIG.v04.tutorial.coachFont.stagePx, 21); assert.strictEqual(CONFIG.v04.tutorial.coachFont.lineHeight, 1.25);
+});
 console.log('v04-test: ' + n + ' checks passed');

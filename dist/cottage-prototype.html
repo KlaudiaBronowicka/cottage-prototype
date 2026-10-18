@@ -480,7 +480,13 @@ textarea { width: 100%; height: 100px; background: #0b0c0e; color: var(--paper);
 .hud.nightc.v04 { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; box-sizing: border-box; }
 .hud.nightc.v04 .moons { margin: 0; } .hud.nightc.v04 .nlabel { white-space: nowrap; }
 .endScreen .endBtn { box-sizing: border-box; }
-#coach.v04:not(.modal) .coachBubble { padding: .35em .8em; } #coach.v04:not(.modal) .coachBubble .ctext { line-height: 1.18; }
+#coach.v04:not(.modal) .coachBubble { padding: .35em .8em; row-gap: 0; }
+/* v0.4.2 (Ola): every line of coach text at the full coach size (21px on the 1920 stage = 14px at 1280), line-height 1.25;
+   the step label and "your turn" share the first row, the text gets 3 lines in the 120px hint_line */
+#coach.v04 .coachBubble .cstep, #coach.v04 .coachBubble .ctry, #coach.v04 .coachBubble .ctext, #coach.v04 .coachBubble button { font-size: 1em; line-height: inherit; }
+#coach.v04 .coachBubble .cstep { letter-spacing: .04em; } #coach.v04 .coachBubble .cstep .ctry { text-transform: none; letter-spacing: 0; margin: 0; }
+#coach.v04.modal .coachBubble .ctext { font-size: 1.35em; }
+.face.off { opacity: .3; filter: grayscale(1); }
 .hud.nightc.v04 { gap: 10px; padding: 0 14px; } .hud.nightc.v04 .moons { gap: 6px; } .hud.nightc.v04 .moon .ic { width: 40px; height: 40px; }
 .hud.deck .dlbl { line-height: 1.25; margin-top: 8px; } /* v0.4.1 deck box is 210 tall */
 
@@ -503,7 +509,7 @@ textarea { width: 100%; height: 100px; background: #0b0c0e; color: var(--paper);
  * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
  * ===================================================================== */
 var CONFIG = {
-  version: 'v0.4.1 Stripped Core (on kit-v0.1 + rules v0.2 + v0.3.2) / build 7',
+  version: 'v0.4.2 Stripped Core (on kit-v0.1 + rules v0.2 + v0.3.2) / build 8',
 
   // ---------- Setup ----------
   startPressure: 0,          // pressure token starts here
@@ -713,7 +719,10 @@ var CONFIG = {
       guidedHours: 2,
       events: ['footsteps', 'knocking', 'draught'],
       hand: ['rummage', 'shortcut', 'bread', 'bar', 'deepBreath'],
-      safeRolls: true       // guided rolls never show a bad omen or a -1 (the lesson always works)
+      safeRolls: true,      // guided rolls never show a bad omen or a -1 (the lesson always works); the roll window shows those odds (v0.4.2)
+      // v0.4.2 (Ola): coach text size on the 1920 stage. 21 = 14px at 1280x720. Text never shrinks below this: a step that
+      // needs more than maxLines in the 120px hint_line is listed for a copy cut (tools/art-fit-v04.js), not squeezed.
+      coachFont: { stagePx: 21, lineHeight: 1.25, maxLines: 3 }
     },
     // GAP (Tomek): Ward with the creature already at the trees has nothing to push. true = can't be played then (simplest UX); false = playable, no effect
     wardNeedsTarget: true,
@@ -1469,23 +1478,24 @@ var UI_TEXT = {
     },
     // Guided Hours 1-2 (spec section 6; coach text VERBATIM at the defaults, numbers/names templated so config and ?presence=A|B reach them).
     // target: element ids to highlight; trayTarget: ids once the roll window is open. allow: live controls.
-    // await: 'roll:<cardId>' = roll with that card added, then Continue · 'move:<zoneId>' · 'play:<cardId>' · 'endTurn' · 'modal' (handoff) · none = Next.
+    // await: 'roll:icon' = roll with any card carrying the roll's icon added, then Continue (v0.4.2; 'roll:<cardId>' = that card) · 'move:<zoneId>' · 'play:<cardId>' · 'endTurn' · 'modal' (handoff) · none = Next.
     onboarding: {
       steps: [
         { id: 'goal',     hour: 1, target: ['goalBanner', 'nightCounter'], text: 'Your goal: find {goal} {t.TERM_CLUES} before {t.TERM_DAWN}. {T.TERM_DAWN} comes after {total} {t.TERM_NIGHTS}. If {T.TERM_DREAD} reaches {max}, you lose.' },
         { id: 'event',    hour: 1, target: ['nightEvent', 'dread'], text: 'Every {t.TERM_NIGHT} starts with an event. This one raised {T.TERM_DREAD} to {dread}. {T.TERM_DREAD} is your danger meter. Keep it low.' },
         { id: 'creature', hour: 1, target: ['approach', 'nextEvent'], text: 'This is {t.TERM_PRESENCE}. You can\'t fight it. It comes one step closer every {t.TERM_NIGHT}. If it reaches the {t.TRACK_APPROACH_4}, {T.TERM_DREAD} goes up. The card on the right shows next {t.TERM_NIGHT}\'s event, so you can plan.' },
-        { id: 'search',   hour: 1, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:rummage', text: '{T.ACT_SEARCH} the {t.ZONE_HOUSE} for a {t.TERM_CLUE}. It\'s the safest place, but worth only 1 {t.TERM_CLUE}. You need 2. Add a card with a magnifier for +1, then {t.TERM_ROLL}. Cards you add are used up.' },
+        { id: 'search',   hour: 1, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:icon', text: '{T.ACT_SEARCH} the {t.ZONE_HOUSE} for a {t.TERM_CLUE}. It\'s the safest place, but worth only 1 {t.TERM_CLUE}. You need 2. Add a card with a magnifier for +1, then {t.TERM_ROLL}. Cards you add are used up.' },
         { id: 'move',     hour: 1, target: ['clues', 'act-move', 'zone-yard'], allow: ['act-move', 'zone-yard'], await: 'move:yard', text: 'You found a {t.TERM_CLUE}. Now move to the {t.ZONE_YARD}. It\'s worth 2 {t.TERM_CLUES} but harder to search. {T.TERM_PRESENCE} isn\'t close yet, so it\'s safe to go out.' },
         { id: 'end',      hour: 1, target: ['act-end', 'deckPile'], allow: ['act-end'], await: 'endTurn', text: 'You\'ve used your 2 {t.TERM_ACTIONS} for this {t.TERM_NIGHT}. End the {t.TERM_NIGHT} and you\'ll draw a card.' },
         { id: 'warning',  hour: 2, target: ['approach', 'visitWarn', 'nextEvent'], text: '{T.TERM_PRESENCE} is at the {t.TRACK_APPROACH_3}. Next {t.TERM_NIGHT} it reaches the {t.TRACK_APPROACH_4}, and {T.TERM_DREAD} will go up. You have 2 {t.TERM_ACTIONS}: use one to search and one to turn it away.' },
-        { id: 'search2',  hour: 2, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:shortcut', text: '{T.ACT_SEARCH} the {t.ZONE_YARD} first while you\'re here. You need 3: add a magnifier card again.' },
+        { id: 'search2',  hour: 2, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:icon', text: '{T.ACT_SEARCH} the {t.ZONE_YARD} first while you\'re here. You need 3: add a magnifier card again.' },
         { id: 'bread',    hour: 2, target: ['card-bread'], allow: ['card-bread'], await: 'play:bread', text: 'Now play Bread and Salt. It lowers {T.TERM_DREAD} and sends {t.TERM_PRESENCE} back to the trees. {T.ACT_COMFORT} and Bar the Door also keep it away.' },
         { id: 'handoff',  hour: 2, target: [], await: 'modal', text: 'You\'re on your own for the last {left} {t.TERM_NIGHTS}. You need {more} more {t.TERM_CLUES}. Watch {T.TERM_DREAD} and {t.TERM_PRESENCE}, and hover over anything for a reminder.' }
       ]
     },
     you: 'You', // the player's token label (no character names in v0.4)
-    rollNeedsCard: 'Add {card} to the {t.TERM_ROLL} first, then roll.'
+    rollNeedsCard: 'Add {card} to the {t.TERM_ROLL} first, then roll.',
+    rollNeedsIcon: 'Add a {stat} card to the {t.TERM_ROLL} first, then roll.' // v0.4.2 placeholder (Greg), same pattern as rollNeedsCard: for Zosia
   },
 
   // ---------- How to play (Clarity Pass §9.4, 153 words) ----------
@@ -2376,7 +2386,7 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
       if (v.noStory) cfg.noStory = true;
       cfg.turnName = v.turnName || 'hour';
       var t = v.tutorial || {};
-      cfg.tutorialHand = t.hand || []; cfg.tutorialEvents = t.events || []; cfg.tutorialSafeRolls = !!t.safeRolls; cfg.tutorialGuidedHours = t.guidedHours || 0;
+      cfg.tutorialHand = t.hand || []; cfg.tutorialEvents = t.events || []; cfg.tutorialSafeRolls = !!t.safeRolls; cfg.tutorialGuidedHours = t.guidedHours || 0; cfg.tutorialCoachFont = t.coachFont || null;
       cfg.chairCard = null;
     }
     cfg.presence = pr;
@@ -2947,16 +2957,19 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
 (function (root) {
   'use strict';
   /** testOdds(cfg, preDraw, difficulty) → { p, pStrong, pStar, faces:[{roll, token, total, result}] }
-   *  result: 'star' | 'fail' | 'success' | 'strong' */
-  function testOdds(cfg, preDraw, difficulty) {
-    var faces = [], n = cfg.testBag.length, win = 0, strong = 0, star = 0;
+   *  result: 'star' | 'fail' | 'success' | 'strong'
+   *  opts.guided (v0.4.2): the guided tutorial rolls (game.js runTest, S.tutorialGuided) never land on the bad omen or a
+   *  negative face; those faces are re-rolled uniformly onto the safe ones, so they are flagged off:true and left out of p. */
+  function testOdds(cfg, preDraw, difficulty, opts) {
+    var guided = !!(opts && opts.guided), faces = [], n = 0, win = 0, strong = 0, star = 0;
     cfg.testBag.forEach(function (tok, i) {
       var f = { roll: i + 1, token: tok };
-      if (tok === 'STAR') { f.result = 'star'; f.total = null; star++; }
+      if (guided && (tok === 'STAR' || tok < 0)) f.off = true; else n++;
+      if (tok === 'STAR') { f.result = 'star'; f.total = null; if (!f.off) star++; }
       else {
         f.total = preDraw + tok;
         f.result = f.total >= difficulty + cfg.strongMargin ? 'strong' : f.total >= difficulty ? 'success' : 'fail';
-        if (f.result !== 'fail') win++; if (f.result === 'strong') strong++;
+        if (!f.off) { if (f.result !== 'fail') win++; if (f.result === 'strong') strong++; }
       }
       faces.push(f);
     });
@@ -3511,7 +3524,7 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
   function evDef(id) { return U.game.cfg.events.filter(function (e) { return e.id === id; })[0]; }
   function oddsOf(stat, need, commits, helps) {
     var G = U.game, pv = G.previewTest(stat, need, commits || [], helps || []);
-    return { pv: pv, o: Odds.testOdds(G.cfg, pv.preDraw, need) };
+    return { pv: pv, o: Odds.testOdds(G.cfg, pv.preDraw, need, { guided: !!G.state.tutorialGuided }) }; // v0.4.2: guided rolls show their real (safe-face) odds
   }
   function bestCommits(stat, excludeId) {
     var G = U.game, ic = Engine.ICON_OF_STAT[stat];
@@ -3953,6 +3966,17 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
     if (T.kind === 'holdDoor') return c.holdDoorDifficulty;
     return searchNeed(T.zone);
   }
+  // v0.4.2 guided-roll gate. A step's await 'roll:icon' = roll with any card carrying this roll's icon (the coach text says
+  // "add a magnifier card", so the gate must not insist on one card id). 'roll:<cardId>' still works, but falls back to any
+  // matching card when that card is not in hand, and to no card when the hand has none: the tutorial can never soft-lock.
+  function rollGate(ts) { return ts && /^roll:/.test(ts.await || '') ? ts.await.slice(5) : null; }
+  function gateCheck(want, T) {
+    var G = U.game, ic = Engine.ICON_OF_STAT[T.stat], has = function (id) { return G.card(id).icons.indexOf(ic) >= 0; };
+    var cands = G.state.hand.filter(function (id) { return id !== T.cardId && has(id); });
+    if (want !== 'icon' && cands.indexOf(want) >= 0) return T.commits.indexOf(want) >= 0 ? { ok: true } : { ok: false, msg: P('v04.rollNeedsCard', { card: cardName(want) }) };
+    if (!cands.length || T.commits.some(has)) return { ok: true };
+    return { ok: false, msg: P('v04.rollNeedsIcon', { stat: statName(T.stat) }) };
+  }
   function trayTitle() {
     var T = U.tray;
     if (T.kind === 'steady') return P('roll.titleComfort');
@@ -3963,7 +3987,10 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
   function toggleCommit(id) {
     var T = U.tray, G = U.game; if (!T || T.result || id === T.cardId) return;
     if (G.card(id).icons.indexOf(Engine.ICON_OF_STAT[T.stat]) < 0) return;
-    var i = T.commits.indexOf(id); if (i >= 0) T.commits.splice(i, 1); else T.commits.push(id);
+    var i = T.commits.indexOf(id);
+    if (i >= 0) T.commits.splice(i, 1);
+    else if (rollGate(tutStep())) T.commits = [id]; // v0.4.2 guided roll: one card at a time (a second tap swaps it), so a magnifier is left for the next guided Search
+    else T.commits.push(id);
     renderEncounter();
   }
   function faceLabel(tok) { return tok === 'STAR' ? P('roll.faceOmen') : tok > 0 ? '+' + tok : tok < 0 ? '−' + (-tok) : '+0'; }
@@ -3987,7 +4014,7 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
     var r = T.result;
     var faces = od.o.faces.map(function (f) {
       var res = f.result === 'star' ? P('roll.resOmen') : f.result === 'strong' ? P('roll.resStrong') : f.result === 'success' ? P('roll.resWin') : P('roll.resFail');
-      return '<div class="face ' + f.result + (r && r.roll === f.roll ? ' rolled' : '') + '"' + tipA(P('roll.faceTip', { face: f.roll, result: res })) + '><div class="fn">' + f.roll + '</div><div class="ft">' + (f.token === 'STAR' ? icon('STAR', { alt: '' }) : esc(faceLabel(f.token))) + '</div><div class="fr">' + esc(res) + '</div></div>';
+      return '<div class="face ' + f.result + (f.off ? ' off' : '') + (r && r.roll === f.roll ? ' rolled' : '') + '"' + tipA(P('roll.faceTip', { face: f.roll, result: res })) + '><div class="fn">' + f.roll + '</div><div class="ft">' + (f.token === 'STAR' ? icon('STAR', { alt: '' }) : esc(faceLabel(f.token))) + '</div><div class="fr">' + esc(res) + '</div></div>';
     }).join('');
     var zonePick = T.pickZone && !r ? '<div class="zonepick">' + X('roll.zonePick') + ' ' + G.cfg.zones.map(function (z, i) {
       if (T.zones && T.zones.indexOf(i) < 0) return '';
@@ -4022,18 +4049,18 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
     all('[data-zonepick]', function (b) { b.onclick = function () { T.zone = +b.dataset.zonepick; renderEncounter(); }; });
     on('rollCancel', function () { U.tray = null; renderEncounter(); tutSignal('trayCancel'); });
     on('rollGo', function () {
-      var ts = tutStep(), want = ts && /^roll:/.test(ts.await || '') ? ts.await.slice(5) : null;
-      if (want && T.commits.indexOf(want) < 0) { flashMsg(P('v04.rollNeedsCard', { card: cardName(want) })); shakeCoach(); return; } // v0.4 guided roll: add the named card first
+      var ts = tutStep(), want = rollGate(ts), gate = want ? gateCheck(want, T) : null;
+      if (gate && !gate.ok) { flashMsg(gate.msg); shakeCoach(); return; } // guided roll: add a matching card first (only when one is in hand)
       var o = { commits: T.commits.slice(), helps: T.helps.slice() }, res;
       if (T.kind === 'investigate') res = G.investigate(o);
       else if (T.kind === 'steady') res = G.steady(o);
       else if (T.kind === 'holdDoor') res = G.holdDoor(o);
       else res = G.play(T.cardId, Object.assign(o, { zone: T.zone }));
       if (!res.ok) { flashMsg(res.error); return; }
-      T.result = res.test; T.used = o.commits; T.commits = []; T.helps = [];
+      T.result = res.test; T.used = o.commits; T.commits = []; T.helps = []; T.gate = want ? ts.await : null;
       renderEncounter(); tutSignal('roll'); if (T.kind === 'card') tutSignal('play:' + T.cardId);
     });
-    on('rollDone', function () { var used = T.used || []; U.tray = null; renderEncounter(); used.forEach(function (id) { tutSignal('roll:' + id); }); });
+    on('rollDone', function () { var gate = T.gate; U.tray = null; renderEncounter(); if (gate) tutSignal(gate); }); // v0.4.2: the step's gate was met at Roll time
   }
 
   // ---------- DAWN: answer the Questions ----------
@@ -4275,10 +4302,11 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
     var voice = s.voice ? lineParts(s.voice) : null;
     var n = U.tut.i + 1;
     coach.innerHTML = '<svg class="coachShade" width="' + W + '" height="' + Hh + '"><defs><mask id="cm"><rect width="100%" height="100%" fill="white"/>' + holes + '</mask></defs><rect width="100%" height="100%" fill="rgba(5,8,12,.62)" mask="url(#cm)"/></svg>' + rings +
-      '<div class="coachBubble" id="coachBubble"><div class="cstep">' + X('ui.coachStep', { n: n, total: STEPS.length }) + '</div>' +
+      '<div class="coachBubble" id="coachBubble"><div class="cstep">' + X('ui.coachStep', { n: n, total: STEPS.length }) +
+        (V4 && s.await && s.await !== 'modal' ? ' · <span class="ctry">' + X('ui.coachTryIt') + '</span>' : '') + '</div>' + // v0.4.2: step + "your turn" share one row so the text keeps 3 lines at 21px
       (voice ? '<div class="cvoice">' + (voice.who ? '<b>' + esc(Skin.speaker(voice.who, names())) + ':</b> ' + H(voice.text) : H(voice.narr)) + '</div>' : '') +
       '<div class="ctext">' + H(s.text, coachVars()) + '</div>' +
-      (s.await && s.await !== 'modal' ? '<div class="ctry">' + X('ui.coachTryIt') + '</div>' : '') +
+      (s.await && s.await !== 'modal' && !V4 ? '<div class="ctry">' + X('ui.coachTryIt') + '</div>' : '') +
       '<div class="cbtns">' + (V4 ? '' : '<button id="coachSkip"' + tipA(P('ui.coachSkipTip')) + '>' + X('ui.coachSkip') + '</button>') +
       (U.tut.i > 0 && !s.await && !STEPS[U.tut.i - 1].await ? '<button id="coachBack"' + tipA(P('ui.coachBackTip')) + '>' + X('ui.coachBack') + '</button>' : '') +
       (s.await && s.await !== 'modal' ? '' : '<button class="primary" id="coachNext"' + tipA(P('ui.coachNextTip')) + '>' + X(n === STEPS.length ? 'ui.coachDone' : 'ui.coachNext') + ' ▸</button>') + '</div></div>';
@@ -4289,7 +4317,8 @@ if (typeof module !== 'undefined') module.exports = BOARD_LAYOUT;
     if (V4) { // v0.4 layout v3: coach text in the hint_line strip; the handoff in tutorial_modal (stage boxes → screen pixels)
       var sr = stage.getBoundingClientRect(), cb = layoutBox(s.await === 'modal' ? 'tutorialModal' : 'coach');
       b.style.left = (sr.left + cb.x * SCALE) + 'px'; b.style.top = (sr.top + cb.y * SCALE) + 'px'; b.style.width = (cb.w * SCALE) + 'px';
-      b.style.minHeight = (cb.h * SCALE) + 'px'; b.style.fontSize = ((s.await === 'modal' ? 20 : 19) * SCALE) + 'px'; // v0.4.1 hint_line is 120 tall → 19-20px coach text
+      b.style.minHeight = (cb.h * SCALE) + 'px'; var cf = (ECFG.tutorialCoachFont || {}); // v0.4.2 (Ola): coach text never below cf.stagePx on the 1920 stage (= 14px at 1280)
+      b.style.fontSize = (Math.max(cf.stagePx || 21, s.await === 'modal' ? 20 : 0) * SCALE) + 'px'; b.style.lineHeight = String(cf.lineHeight || 1.25);
     } else if (rects.length) {
       var u = rects.reduce(function (a, r) { return { l: Math.min(a.l, r.left), t: Math.min(a.t, r.top), r: Math.max(a.r, r.right), b: Math.max(a.b, r.bottom) }; }, { l: 1e9, t: 1e9, r: -1e9, b: -1e9 });
       x = (u.l + u.r) / 2 - bw / 2;

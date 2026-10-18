@@ -545,23 +545,24 @@ var UI_TEXT = {
     },
     // Guided Hours 1-2 (spec section 6; coach text VERBATIM at the defaults, numbers/names templated so config and ?presence=A|B reach them).
     // target: element ids to highlight; trayTarget: ids once the roll window is open. allow: live controls.
-    // await: 'roll:<cardId>' = roll with that card added, then Continue · 'move:<zoneId>' · 'play:<cardId>' · 'endTurn' · 'modal' (handoff) · none = Next.
+    // await: 'roll:icon' = roll with any card carrying the roll's icon added, then Continue (v0.4.2; 'roll:<cardId>' = that card) · 'move:<zoneId>' · 'play:<cardId>' · 'endTurn' · 'modal' (handoff) · none = Next.
     onboarding: {
       steps: [
         { id: 'goal',     hour: 1, target: ['goalBanner', 'nightCounter'], text: 'Your goal: find {goal} {t.TERM_CLUES} before {t.TERM_DAWN}. {T.TERM_DAWN} comes after {total} {t.TERM_NIGHTS}. If {T.TERM_DREAD} reaches {max}, you lose.' },
         { id: 'event',    hour: 1, target: ['nightEvent', 'dread'], text: 'Every {t.TERM_NIGHT} starts with an event. This one raised {T.TERM_DREAD} to {dread}. {T.TERM_DREAD} is your danger meter. Keep it low.' },
         { id: 'creature', hour: 1, target: ['approach', 'nextEvent'], text: 'This is {t.TERM_PRESENCE}. You can\'t fight it. It comes one step closer every {t.TERM_NIGHT}. If it reaches the {t.TRACK_APPROACH_4}, {T.TERM_DREAD} goes up. The card on the right shows next {t.TERM_NIGHT}\'s event, so you can plan.' },
-        { id: 'search',   hour: 1, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:rummage', text: '{T.ACT_SEARCH} the {t.ZONE_HOUSE} for a {t.TERM_CLUE}. It\'s the safest place, but worth only 1 {t.TERM_CLUE}. You need 2. Add a card with a magnifier for +1, then {t.TERM_ROLL}. Cards you add are used up.' },
+        { id: 'search',   hour: 1, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:icon', text: '{T.ACT_SEARCH} the {t.ZONE_HOUSE} for a {t.TERM_CLUE}. It\'s the safest place, but worth only 1 {t.TERM_CLUE}. You need 2. Add a card with a magnifier for +1, then {t.TERM_ROLL}. Cards you add are used up.' },
         { id: 'move',     hour: 1, target: ['clues', 'act-move', 'zone-yard'], allow: ['act-move', 'zone-yard'], await: 'move:yard', text: 'You found a {t.TERM_CLUE}. Now move to the {t.ZONE_YARD}. It\'s worth 2 {t.TERM_CLUES} but harder to search. {T.TERM_PRESENCE} isn\'t close yet, so it\'s safe to go out.' },
         { id: 'end',      hour: 1, target: ['act-end', 'deckPile'], allow: ['act-end'], await: 'endTurn', text: 'You\'ve used your 2 {t.TERM_ACTIONS} for this {t.TERM_NIGHT}. End the {t.TERM_NIGHT} and you\'ll draw a card.' },
         { id: 'warning',  hour: 2, target: ['approach', 'visitWarn', 'nextEvent'], text: '{T.TERM_PRESENCE} is at the {t.TRACK_APPROACH_3}. Next {t.TERM_NIGHT} it reaches the {t.TRACK_APPROACH_4}, and {T.TERM_DREAD} will go up. You have 2 {t.TERM_ACTIONS}: use one to search and one to turn it away.' },
-        { id: 'search2',  hour: 2, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:shortcut', text: '{T.ACT_SEARCH} the {t.ZONE_YARD} first while you\'re here. You need 3: add a magnifier card again.' },
+        { id: 'search2',  hour: 2, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:icon', text: '{T.ACT_SEARCH} the {t.ZONE_YARD} first while you\'re here. You need 3: add a magnifier card again.' },
         { id: 'bread',    hour: 2, target: ['card-bread'], allow: ['card-bread'], await: 'play:bread', text: 'Now play Bread and Salt. It lowers {T.TERM_DREAD} and sends {t.TERM_PRESENCE} back to the trees. {T.ACT_COMFORT} and Bar the Door also keep it away.' },
         { id: 'handoff',  hour: 2, target: [], await: 'modal', text: 'You\'re on your own for the last {left} {t.TERM_NIGHTS}. You need {more} more {t.TERM_CLUES}. Watch {T.TERM_DREAD} and {t.TERM_PRESENCE}, and hover over anything for a reminder.' }
       ]
     },
     you: 'You', // the player's token label (no character names in v0.4)
-    rollNeedsCard: 'Add {card} to the {t.TERM_ROLL} first, then roll.'
+    rollNeedsCard: 'Add {card} to the {t.TERM_ROLL} first, then roll.',
+    rollNeedsIcon: 'Add a {stat} card to the {t.TERM_ROLL} first, then roll.' // v0.4.2 placeholder (Greg), same pattern as rollNeedsCard: for Zosia
   },
 
   // ---------- How to play (Clarity Pass §9.4, 153 words) ----------

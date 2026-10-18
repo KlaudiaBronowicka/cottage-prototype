@@ -362,7 +362,7 @@
   function evDef(id) { return U.game.cfg.events.filter(function (e) { return e.id === id; })[0]; }
   function oddsOf(stat, need, commits, helps) {
     var G = U.game, pv = G.previewTest(stat, need, commits || [], helps || []);
-    return { pv: pv, o: Odds.testOdds(G.cfg, pv.preDraw, need) };
+    return { pv: pv, o: Odds.testOdds(G.cfg, pv.preDraw, need, { guided: !!G.state.tutorialGuided }) }; // v0.4.2: guided rolls show their real (safe-face) odds
   }
   function bestCommits(stat, excludeId) {
     var G = U.game, ic = Engine.ICON_OF_STAT[stat];
@@ -804,6 +804,17 @@
     if (T.kind === 'holdDoor') return c.holdDoorDifficulty;
     return searchNeed(T.zone);
   }
+  // v0.4.2 guided-roll gate. A step's await 'roll:icon' = roll with any card carrying this roll's icon (the coach text says
+  // "add a magnifier card", so the gate must not insist on one card id). 'roll:<cardId>' still works, but falls back to any
+  // matching card when that card is not in hand, and to no card when the hand has none: the tutorial can never soft-lock.
+  function rollGate(ts) { return ts && /^roll:/.test(ts.await || '') ? ts.await.slice(5) : null; }
+  function gateCheck(want, T) {
+    var G = U.game, ic = Engine.ICON_OF_STAT[T.stat], has = function (id) { return G.card(id).icons.indexOf(ic) >= 0; };
+    var cands = G.state.hand.filter(function (id) { return id !== T.cardId && has(id); });
+    if (want !== 'icon' && cands.indexOf(want) >= 0) return T.commits.indexOf(want) >= 0 ? { ok: true } : { ok: false, msg: P('v04.rollNeedsCard', { card: cardName(want) }) };
+    if (!cands.length || T.commits.some(has)) return { ok: true };
+    return { ok: false, msg: P('v04.rollNeedsIcon', { stat: statName(T.stat) }) };
+  }
   function trayTitle() {
     var T = U.tray;
     if (T.kind === 'steady') return P('roll.titleComfort');
@@ -814,7 +825,10 @@
   function toggleCommit(id) {
     var T = U.tray, G = U.game; if (!T || T.result || id === T.cardId) return;
     if (G.card(id).icons.indexOf(Engine.ICON_OF_STAT[T.stat]) < 0) return;
-    var i = T.commits.indexOf(id); if (i >= 0) T.commits.splice(i, 1); else T.commits.push(id);
+    var i = T.commits.indexOf(id);
+    if (i >= 0) T.commits.splice(i, 1);
+    else if (rollGate(tutStep())) T.commits = [id]; // v0.4.2 guided roll: one card at a time (a second tap swaps it), so a magnifier is left for the next guided Search
+    else T.commits.push(id);
     renderEncounter();
   }
   function faceLabel(tok) { return tok === 'STAR' ? P('roll.faceOmen') : tok > 0 ? '+' + tok : tok < 0 ? '−' + (-tok) : '+0'; }
@@ -838,7 +852,7 @@
     var r = T.result;
     var faces = od.o.faces.map(function (f) {
       var res = f.result === 'star' ? P('roll.resOmen') : f.result === 'strong' ? P('roll.resStrong') : f.result === 'success' ? P('roll.resWin') : P('roll.resFail');
-      return '<div class="face ' + f.result + (r && r.roll === f.roll ? ' rolled' : '') + '"' + tipA(P('roll.faceTip', { face: f.roll, result: res })) + '><div class="fn">' + f.roll + '</div><div class="ft">' + (f.token === 'STAR' ? icon('STAR', { alt: '' }) : esc(faceLabel(f.token))) + '</div><div class="fr">' + esc(res) + '</div></div>';
+      return '<div class="face ' + f.result + (f.off ? ' off' : '') + (r && r.roll === f.roll ? ' rolled' : '') + '"' + tipA(P('roll.faceTip', { face: f.roll, result: res })) + '><div class="fn">' + f.roll + '</div><div class="ft">' + (f.token === 'STAR' ? icon('STAR', { alt: '' }) : esc(faceLabel(f.token))) + '</div><div class="fr">' + esc(res) + '</div></div>';
     }).join('');
     var zonePick = T.pickZone && !r ? '<div class="zonepick">' + X('roll.zonePick') + ' ' + G.cfg.zones.map(function (z, i) {
       if (T.zones && T.zones.indexOf(i) < 0) return '';
@@ -873,18 +887,18 @@
     all('[data-zonepick]', function (b) { b.onclick = function () { T.zone = +b.dataset.zonepick; renderEncounter(); }; });
     on('rollCancel', function () { U.tray = null; renderEncounter(); tutSignal('trayCancel'); });
     on('rollGo', function () {
-      var ts = tutStep(), want = ts && /^roll:/.test(ts.await || '') ? ts.await.slice(5) : null;
-      if (want && T.commits.indexOf(want) < 0) { flashMsg(P('v04.rollNeedsCard', { card: cardName(want) })); shakeCoach(); return; } // v0.4 guided roll: add the named card first
+      var ts = tutStep(), want = rollGate(ts), gate = want ? gateCheck(want, T) : null;
+      if (gate && !gate.ok) { flashMsg(gate.msg); shakeCoach(); return; } // guided roll: add a matching card first (only when one is in hand)
       var o = { commits: T.commits.slice(), helps: T.helps.slice() }, res;
       if (T.kind === 'investigate') res = G.investigate(o);
       else if (T.kind === 'steady') res = G.steady(o);
       else if (T.kind === 'holdDoor') res = G.holdDoor(o);
       else res = G.play(T.cardId, Object.assign(o, { zone: T.zone }));
       if (!res.ok) { flashMsg(res.error); return; }
-      T.result = res.test; T.used = o.commits; T.commits = []; T.helps = [];
+      T.result = res.test; T.used = o.commits; T.commits = []; T.helps = []; T.gate = want ? ts.await : null;
       renderEncounter(); tutSignal('roll'); if (T.kind === 'card') tutSignal('play:' + T.cardId);
     });
-    on('rollDone', function () { var used = T.used || []; U.tray = null; renderEncounter(); used.forEach(function (id) { tutSignal('roll:' + id); }); });
+    on('rollDone', function () { var gate = T.gate; U.tray = null; renderEncounter(); if (gate) tutSignal(gate); }); // v0.4.2: the step's gate was met at Roll time
   }
 
   // ---------- DAWN: answer the Questions ----------
@@ -1126,10 +1140,11 @@
     var voice = s.voice ? lineParts(s.voice) : null;
     var n = U.tut.i + 1;
     coach.innerHTML = '<svg class="coachShade" width="' + W + '" height="' + Hh + '"><defs><mask id="cm"><rect width="100%" height="100%" fill="white"/>' + holes + '</mask></defs><rect width="100%" height="100%" fill="rgba(5,8,12,.62)" mask="url(#cm)"/></svg>' + rings +
-      '<div class="coachBubble" id="coachBubble"><div class="cstep">' + X('ui.coachStep', { n: n, total: STEPS.length }) + '</div>' +
+      '<div class="coachBubble" id="coachBubble"><div class="cstep">' + X('ui.coachStep', { n: n, total: STEPS.length }) +
+        (V4 && s.await && s.await !== 'modal' ? ' · <span class="ctry">' + X('ui.coachTryIt') + '</span>' : '') + '</div>' + // v0.4.2: step + "your turn" share one row so the text keeps 3 lines at 21px
       (voice ? '<div class="cvoice">' + (voice.who ? '<b>' + esc(Skin.speaker(voice.who, names())) + ':</b> ' + H(voice.text) : H(voice.narr)) + '</div>' : '') +
       '<div class="ctext">' + H(s.text, coachVars()) + '</div>' +
-      (s.await && s.await !== 'modal' ? '<div class="ctry">' + X('ui.coachTryIt') + '</div>' : '') +
+      (s.await && s.await !== 'modal' && !V4 ? '<div class="ctry">' + X('ui.coachTryIt') + '</div>' : '') +
       '<div class="cbtns">' + (V4 ? '' : '<button id="coachSkip"' + tipA(P('ui.coachSkipTip')) + '>' + X('ui.coachSkip') + '</button>') +
       (U.tut.i > 0 && !s.await && !STEPS[U.tut.i - 1].await ? '<button id="coachBack"' + tipA(P('ui.coachBackTip')) + '>' + X('ui.coachBack') + '</button>' : '') +
       (s.await && s.await !== 'modal' ? '' : '<button class="primary" id="coachNext"' + tipA(P('ui.coachNextTip')) + '>' + X(n === STEPS.length ? 'ui.coachDone' : 'ui.coachNext') + ' ▸</button>') + '</div></div>';
@@ -1140,7 +1155,8 @@
     if (V4) { // v0.4 layout v3: coach text in the hint_line strip; the handoff in tutorial_modal (stage boxes → screen pixels)
       var sr = stage.getBoundingClientRect(), cb = layoutBox(s.await === 'modal' ? 'tutorialModal' : 'coach');
       b.style.left = (sr.left + cb.x * SCALE) + 'px'; b.style.top = (sr.top + cb.y * SCALE) + 'px'; b.style.width = (cb.w * SCALE) + 'px';
-      b.style.minHeight = (cb.h * SCALE) + 'px'; b.style.fontSize = ((s.await === 'modal' ? 20 : 19) * SCALE) + 'px'; // v0.4.1 hint_line is 120 tall → 19-20px coach text
+      b.style.minHeight = (cb.h * SCALE) + 'px'; var cf = (ECFG.tutorialCoachFont || {}); // v0.4.2 (Ola): coach text never below cf.stagePx on the 1920 stage (= 14px at 1280)
+      b.style.fontSize = (Math.max(cf.stagePx || 21, s.await === 'modal' ? 20 : 0) * SCALE) + 'px'; b.style.lineHeight = String(cf.lineHeight || 1.25);
     } else if (rects.length) {
       var u = rects.reduce(function (a, r) { return { l: Math.min(a.l, r.left), t: Math.min(a.t, r.top), r: Math.max(a.r, r.right), b: Math.max(a.b, r.bottom) }; }, { l: 1e9, t: 1e9, r: -1e9, b: -1e9 });
       x = (u.l + u.r) / 2 - bw / 2;

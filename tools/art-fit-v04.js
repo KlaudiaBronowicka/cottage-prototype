@@ -3,7 +3,7 @@
  * Renders the v0.4 build with live text in Ola's boxes (assets/manifest.js) at 1280x720 and 1920x1080 and reports:
  * card / next-event box overflow (all 10 cards, 8 events), HUD boxes, tokens vs zone strips, zone strips vs the footprint ring (~y703),
  * the zone-strip art size, the coach strip (hint_line, 120px in v0.4.1) and handoff (tutorial_modal) for every tutorial step, the late banner and
- * visit warning, card_inspect @380, and the three end screens (title / result_line / buttons / stats_row). Writes tests/art-fit-report-v041.txt. */
+ * visit warning, card_inspect @380, and the three end screens (title / result_line / buttons / stats_row). Writes tests/art-fit-report-v041.txt (v0.4.2: coach lines + the 14px floor). */
 'use strict';
 var path = require('path'), fs = require('fs');
 var { chromium } = require('playwright-core');
@@ -65,7 +65,8 @@ function ov(r) { return r.need > r.have + 1; }
       var o = [], n = window.__ui.STEPS.length, sc = document.getElementById('stage').getBoundingClientRect().width / 1920;
       for (var i = 0; i < n; i++) { window.__ui.tutGo(i); var bb = document.getElementById('coachBubble'); if (!bb) { o.push({ i: i + 1, missing: true }); continue; }
         var modal = window.__ui.STEPS[i].await === 'modal', box = ASSET_MANIFEST.board.ui[BOARD_LAYOUT.boxes[modal ? 'tutorialModal' : 'coach']];
-        o.push({ i: i + 1, id: window.__ui.STEPS[i].id, modal: modal, need: Math.round(bb.getBoundingClientRect().height / sc), have: box.h, font: parseFloat(getComputedStyle(bb).fontSize) }); }
+        o.push({ i: i + 1, id: window.__ui.STEPS[i].id, modal: modal, need: Math.round(bb.getBoundingClientRect().height / sc), have: box.h, font: parseFloat(getComputedStyle(bb).fontSize),
+          lines: (function () { var t = bb.querySelector('.ctext'); return t ? Math.round(t.getBoundingClientRect().height / parseFloat(getComputedStyle(t).lineHeight)) : 0; })(), text: (bb.querySelector('.ctext') || {}).textContent }); }
       var sk = document.getElementById('skipTut'); return { steps: o, skip: sk ? { need: sk.scrollWidth, have: sk.clientWidth } : null };
     });
     await p2.close();
@@ -101,7 +102,7 @@ function ov(r) { return r.need > r.have + 1; }
     out.push('Tokens: ' + (toks.length ? toks.join('; ') : 'You token inside its zone box and clear of the zone strip in all 3 zones'));
     var fs2 = function (f) { return !f ? 'NOT SHOWN' : (f.need > f.have + 1 || f.hneed > f.hhave + 1) ? 'OVERFLOW (needs ' + f.need + 'x' + f.hneed + ', has ' + f.have + 'x' + f.hhave + ')' : 'fits'; };
     out.push('Hour 5 late_nights_banner: ' + fs2(late.lb) + '; visit_warning: ' + fs2(late.vw) + '; sky_late_overlay ' + (late.sky ? 'on' : 'off'));
-    coachRep.steps.forEach(function (c) { out.push('Coach step ' + c.i + ' (' + c.id + ', ' + (c.modal ? 'tutorial_modal' : 'hint_line') + '): ' + (c.missing ? 'NOT SHOWN' : c.need + ' of ' + c.have + 'px ' + (c.need > c.have + 1 ? 'TALLER THAN THE BOX by ' + (c.need - c.have) + 'px' : 'fits') + ', text ' + c.font.toFixed(1) + ' screen px')); });
+    coachRep.steps.forEach(function (c) { out.push('Coach step ' + c.i + ' (' + c.id + ', ' + (c.modal ? 'tutorial_modal' : 'hint_line') + '): ' + (c.missing ? 'NOT SHOWN' : c.need + ' of ' + c.have + 'px ' + (c.need > c.have + 1 ? 'TALLER THAN THE BOX by ' + (c.need - c.have) + 'px' : 'fits') + ', text ' + c.font.toFixed(1) + ' screen px' + (c.font < 13.95 ? ' (BELOW 14px: phone-size viewport, see README)' : '') + ', ' + c.lines + ' line(s)' + (!c.modal && c.lines > 3 ? ' MORE THAN 3 LINES, cut: "' + c.text + '"' : ''))); });
     out.push('skip_tutorial button: ' + (coachRep.skip ? (coachRep.skip.need > coachRep.skip.have + 1 ? 'OVERFLOW' : 'fits') : 'NOT SHOWN'));
     ends.forEach(function (e) {
       function bf(b) { if (!b) return 'missing'; if (b.missing) return b.name + ' MISSING'; var ovf = b.need > b.have + 1 || b.wneed > b.whave + 1; return b.name + ' y' + b.top + '-' + b.bottom + ' ' + b.w + 'x' + b.h + (ovf ? ' OVERFLOW' : ' fits'); }
