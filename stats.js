@@ -20,10 +20,12 @@
     'maxPressure', 'pressureByRound', 'progressByRound', 'bondChoice', 'finalBondC1', 'finalBondC2', 'beat3Visited',
     'tests', 'testSuccesses', 'stars', 'cardsPlayed', 'cardsCommitted', 'actionCounts',
     // v0.2: rule set, tutorial, unused actions, per-night detail
-    'rules', 'tutorial', 'unusedActions', 'perRound'];
+    'rules', 'tutorial', 'unusedActions', 'perRound',
+    // v0.3 The Approach: Presence logging (Tension Pass §9.11)
+    'presenceMode', 'presenceDirection', 'presenceByNight', 'presenceVisits', 'presenceVisitsBlocked', 'offeringsPlayed', 'comfortPushes', 'searchPulls', 'presenceSteps', 'presenceClosest'];
 
   function buildRecord(game, meta) {
-    var S = game.state, R = S.result, cfg = game.cfg;
+    var S = game.state, R = S.result, cfg = game.cfg, Pr = S.presence;
     var open = cfg.threads.map(function (t) { return t.id; }).filter(function (id) { return R.threadsResolved.indexOf(id) < 0; });
     var actions = 0; for (var k in S.stats.actions) actions += S.stats.actions[k];
     return {
@@ -48,8 +50,14 @@
       unusedActions: S.roundsPlayed * cfg.actionsPerRound - actions,
       // one entry per night: n<round>:<action counts>|p<plays>c<commits>h<helps>|D<dread>|C<clues>|<pov>/<c1>
       perRound: (S.perRound || []).map(function (r) {
-        return 'n' + r.round + ':' + (Object.keys(r.actions).map(function (k) { return k + r.actions[k]; }).join('.') || '-') + '|p' + r.plays + 'c' + r.commits + 'h' + r.helps + '|D' + r.dread + '|C' + r.clues + '|' + r.pov + '/' + r.c1;
-      }).join(' ')
+        return 'n' + r.round + ':' + (Object.keys(r.actions).map(function (k) { return k + r.actions[k]; }).join('.') || '-') + '|p' + r.plays + 'c' + r.commits + 'h' + r.helps + '|D' + r.dread + '|C' + r.clues + '|' + r.pov + '/' + r.c1 + (r.presence != null ? '|P' + r.presence : '');
+      }).join(' '),
+      // Presence position per night is a track index: 0 Treeline, 1 Yard, 2 Window, 3 Door
+      presenceMode: Pr ? (Pr.asked !== Pr.mode ? Pr.asked + '>' + Pr.mode : Pr.mode) : 'off',
+      presenceDirection: Pr ? (meta.presenceDirection || (cfg.presence && cfg.presence.direction) || '') : '',
+      presenceByNight: Pr ? Pr.byNight.join(' ') : '', presenceVisits: Pr ? Pr.visits : '', presenceVisitsBlocked: Pr ? Pr.blocked : '',
+      offeringsPlayed: Pr ? Pr.offerings : '', comfortPushes: Pr ? Pr.comfortPushes : '', searchPulls: Pr ? Pr.searchPulls : '',
+      presenceSteps: Pr ? Pr.steps : '', presenceClosest: Pr ? Pr.closest : ''
     };
   }
 

@@ -7,7 +7,7 @@
  * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
  * ===================================================================== */
 var CONFIG = {
-  version: 'kit-v0.1 + rules v0.2 / build 2',
+  version: 'kit-v0.1 + rules v0.2 + v0.3 The Approach / build 3',
 
   // ---------- Setup ----------
   startPressure: 0,          // pressure token starts here
@@ -127,6 +127,35 @@ var CONFIG = {
   tutorialHand: ['story', 'kompot'],
   // Outcome recap (Narrative Writer): the COMPANION 2 line always shows; the extra tag lines only when this is ON.
   recapTagLines: false,
+
+  // ---------- v0.3 "The Approach" (Tension Pass v0.3, Variant 1, APPROVED by Klaudia 18 Oct 2026) ----------
+  // A PRESENCE walks a 4-space Approach track (Treeline > Yard > Window > Door). It is never fought, only turned away.
+  // mode: 'off' = rule set v0.2 exactly · 'track' = Variant 1 (default) · 'token' = Variant 2 (PARKED, not built:
+  //   falls back to 'track' and is logged as presenceMode 'token>track'). URL ?presence=off|track|token|A|B overrides.
+  presence: {
+    mode: 'track',
+    direction: 'A',             // copy set in data/ui-text.js presence.dirs: 'A' = the domowik, 'B' = the zmora
+    spaces: ['treeline', 'yard', 'window', 'door'], // track order; names in ui-text terms TRACK_APPROACH_1..4
+    start: 0,                   // index into spaces: starts on the Treeline
+    footprintEvents: ['footsteps', 'gate', 'silence', 'handle'], // a marked event steps the Presence when it resolves (even if a Bar cancels it)
+    footprintSteps: 1,
+    lateFromNight: 5,           // nights 5-6: extra step(s) each night
+    lateExtraSteps: 1,
+    lateStepNeedsFootprint: false, // GAP (Tomek): spec reads "1 extra step each night"; true = only on footprint nights
+    treelineSearchSteps: 1,     // a successful Search OF the Treeline draws it closer
+    searchPullCountsCards: true,// GAP (Tomek): Key on a String searching the Treeline counts too
+    comfortPushBack: 1,         // a Comfort success turns it back this many spaces (not past the start)
+    visitDread: 1,              // visit at the Door (no Bar): Dread +1 ...
+    visitC1Out: 1,              // ... and COMPANION 1 one zone outward ...
+    visitReturnTo: 0,           // ... then the Presence goes back to the Treeline
+    barBlockReturnTo: 1,        // a Bar stops the visit (Bar used); the Presence falls back to the Yard
+    eventOverrides: { handle: { pressure: 1 } }, // The Door Handle: Dread +2 -> +1 (tuned)
+    offeringCard: { id: 'bread', replaces: 'kompot', name: 'Bread and Salt', icons: ['C'], effect: 'offering', value: -1, text: 'Dread -1 and the Presence goes back to the Treeline.' },
+    tutorialHand: ['story', 'bread'],
+    doorLineCount: 3,           // visit lines per direction (data/ui-text.js); one is picked with the seeded RNG
+    lateBoard: 'overlay'        // nights 5-6 look: 'overlay' = cross-fade the artist's sky_late_overlay over the board (default, Klaudia/Ola decision)
+                                //   'swap' = swap to board_bg_late · 'none' = no change. URL ?late=overlay|swap|none overrides.
+  },
 
   // ---------- UI action list (data-driven) ----------
   // Which actions the action bar offers, in order ('play' = Play a card; End turn is always shown).

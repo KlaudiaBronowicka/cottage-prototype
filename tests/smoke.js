@@ -52,7 +52,9 @@ function botStep(g, rng, style) {
     // simple priorities: calm when high, bring C1 home, progress cards, else investigate yard with icons
     var playIf = function (eff) { var id = S.hand.filter(function (x) { return g.card(x).effect === eff && g.canPlay(x).ok; })[0]; return id; };
     var id;
-    if (S.pressure >= 3 && (id = playIf('pressure'))) return g.play(id);
+    var fc = g.presenceForecast && g.presenceForecast();
+    if (fc && fc.visit && S.bars === 0 && (id = playIf('offering') || playIf('placeBar'))) return g.play(id); // v0.3: read the face-up clock
+    if (S.pressure >= 3 && (id = playIf('pressure') || playIf('offering'))) return g.play(id);
     if (S.c1 > 0 && (id = playIf('c1InwardAndCalm') || playIf('c1Home'))) return g.play(id);
     if (S.c1 > 0 || S.pressure >= 4) return g.steady({ commits: matching(g, 'CARE'), helps: eligibleHelps(g, 'CARE') });
     if ((id = playIf('progressObject') || playIf('progress'))) return g.play(id);
@@ -121,10 +123,15 @@ var outcomes = {}, ends = {}, n = 0, styles = ['random', 'smart', 'reckless'];
 var progressSum = { smart: 0, random: 0 }, cnt = { smart: 0, random: 0 };
 var store = new Stats.Store('test', null);
 // rule set v0.2 (default, all flags ON) for most seeds; every 5th seed plays the kit v0.1 rules (all flags OFF) so both stay working
-var LEGACY = Object.assign({}, CONFIG, { rules: { cutDrawAndHold: false, endTurnButton: false, startZeroClues: false, chairForPierogi: false } });
+var LEGACY = Object.assign({}, CONFIG, { rules: { cutDrawAndHold: false, endTurnButton: false, startZeroClues: false, chairForPierogi: false }, presence: Object.assign({}, CONFIG.presence, { mode: 'off' }) });
+// v0.3: presence modes off / track / token (token = parked Variant 2, runs the track rules) and both copy directions
+function withPresence(mode, dir) { return Object.assign({}, CONFIG, { presence: Object.assign({}, CONFIG.presence, { mode: mode, direction: dir || 'A' }) }); }
+var P_OFF = withPresence('off'), P_TOKEN = withPresence('token'), P_B = withPresence('track', 'B');
 for (var seed = 1; seed <= 4000; seed++) {
   var style = styles[seed % 3];
-  var g = playOne(seed, style, seed % 2 ? 'random' : 'max', { cfg: seed % 5 === 0 ? LEGACY : CONFIG });
+  var g = playOne(seed, style, seed % 2 ? 'random' : 'max', { cfg: seed % 5 === 0 ? LEGACY : seed % 7 === 0 ? P_OFF : seed % 11 === 0 ? P_TOKEN : seed % 2 ? P_B : CONFIG });
+  if (g.state.presence) { assert(g.state.presence.pos >= 0 && (g.state.presence.pos <= 2 || g.state.endReason === 'pressure'), 'Presence never rests on the Door (unless the visit broke the night)'); assert.strictEqual(g.state.presence.byNight.length, g.state.perRound.length); }
+  else assert(g.cfg.presenceMode === 'off');
   n++;
   outcomes[g.state.result.outcome] = (outcomes[g.state.result.outcome] || 0) + 1;
   ends[g.state.endReason] = (ends[g.state.endReason] || 0) + 1;
@@ -194,17 +201,69 @@ assert.deepStrictEqual(a.state.log, b.state.log, 'seeded runs are deterministic'
   S.pressure = 3; S.c1 = 2; S.actionsLeft = 2; var r = g.steady({ roll: 1 }).test; assert(r.success && !r.strong);
   assert.strictEqual(S.pressure, 2); assert.strictEqual(S.c1, 1);
   // the feed names the cause of every change (for the UI)
-  var last = S.feed[S.feed.length - 1]; assert.strictEqual(last.type, 'pressure'); assert.strictEqual(last.src.type, 'comfort');
+  var last = S.feed.filter(function (f) { return f.type === 'pressure'; }).pop(); assert.strictEqual(last.src.type, 'comfort');
 })();
 // guided Night 1: fixed first event + starting cards, first roll succeeds; skipping stops the rig
 (function () {
   for (var sd = 1; sd <= 200; sd++) {
     var g = Engine.createGame(CONFIG, { seed: sd, tutorial: true }), S = g.state;
     assert.strictEqual(S.lastEvent.id, CONFIG.tutorialEvent); assert.strictEqual(S.pressure, 1, 'Footsteps raised Dread to 1');
-    CONFIG.tutorialHand.forEach(function (id) { assert(S.hand.indexOf(id) >= 0, 'tutorial hand has ' + id); });
+    g.cfg.tutorialHand.forEach(function (id) { assert(S.hand.indexOf(id) >= 0, 'tutorial hand has ' + id); });
     assert(g.investigate({}).test.success, 'tutorial first Search succeeds (seed ' + sd + ')');
   }
   var g2 = Engine.createGame(CONFIG, { seed: 3, tutorial: true }); g2.endTutorial(); assert(g2.state.tutorialRollRigged && g2.state.tutorialSkipped);
+})();
+
+// ---------- v0.3 The Approach (Tension Pass v0.3, Variant 1) ----------
+(function () {
+  function fresh(seed, cfg) { var g = Engine.createGame(cfg || CONFIG, { seed: seed || 31, bond: 'C1', key: 'KEPT' }); return g; }
+  function nextNight(g, evId) { var S = g.state; var i = S.events.indexOf(evId); if (i >= 0) S.events.splice(i, 1); S.events.unshift(evId); S.actionsLeft = 0; while (S.hand.length >= g.cfg.handLimit) S.discard.push(S.hand.pop()); g.endRound(); assert.strictEqual(S.phase, 'actions'); }
+  var g = fresh(), S = g.state, P = S.presence;
+  assert.strictEqual(g.cfg.presenceMode, 'track', 'presence defaults to track');
+  assert(g.cfg.deck.some(function (c) { return c.id === 'bread'; }) && !g.cfg.deck.some(function (c) { return c.id === 'kompot'; }), 'Bread and Salt replaces Kompot');
+  assert.strictEqual(g.cfg.deck.length, 12);
+  assert.strictEqual(g.cfg.events.filter(function (e) { return e.id === 'handle'; })[0].pressure, 1, 'Door Handle eased to Dread +1');
+  assert.deepStrictEqual(g.cfg.events.filter(function (e) { return e.footprint; }).map(function (e) { return e.id; }).sort(), ['footsteps', 'gate', 'handle', 'silence']);
+  // footprint step happens even when a Bar cancels the event
+  P.pos = 0; S.bars = 1; S.pressure = 0; S.pov = 0; S.c1 = 0; nextNight(g, 'footsteps');
+  assert(S.lastEvent.cancelled && S.bars === 0 && P.pos === 1 && S.pressure === 0, 'Bar cancels event, Presence still steps');
+  // non-footprint event (before nights 5-6): no step
+  nextNight(g, 'voice'); assert.strictEqual(P.pos, 1, 'no footprint, no step');
+  // visit (no Bar): Dread +1, COMPANION 1 one zone out, back to the Treeline
+  S.c1 = 0; P.pos = 2; var d0 = S.pressure; nextNight(g, 'gate');
+  assert.strictEqual(P.visits, 1); assert.strictEqual(P.pos, 0); assert.strictEqual(S.c1, 1); assert.strictEqual(S.pressure, d0 + 1 + (S.pov ? 1 : 0) /* gate hits only if POV outside */);
+  assert(S.feed.some(function (f) { return f.type === 'visit' && f.line >= 0 && f.line < CONFIG.presence.doorLineCount; }), 'visit line index from seeded RNG');
+  // a Bar consumed by the event leaves the visit unblocked; a Bar still up blocks the visit -> Yard
+  var g2 = fresh(32), S2 = g2.state; S2.presence.pos = 2; S2.bars = 0; S2.actionsLeft = 2; S2.pov = 2;
+  S2.hand = ['chair']; S2.deck = S2.deck.filter(function (x) { return x !== 'chair'; });
+  assert(g2.play('chair').ok); var dd = S2.pressure;
+  var r = g2.investigate({ roll: 5 }); // Treeline, base 2 + 1 vs 4 -> fail; force success with a better roll below
+  if (!r.test.success) { S2.actionsLeft = 1; S2.torch = 5; r = g2.investigate({ roll: 1 }); }
+  assert(r.test.success, 'search succeeded');
+  assert.strictEqual(S2.presence.blocked, 1, 'Bar stopped the visit'); assert.strictEqual(S2.bars, 0); assert.strictEqual(S2.presence.pos, 1, 'blocked visit -> Yard');
+  assert.strictEqual(S2.presence.searchPulls >= 1, true); assert(S2.pressure <= dd + 1);
+  // Comfort success turns it back 1 (not past the start); Offering = Dread -1 and back to the start
+  var g3 = fresh(33), S3 = g3.state; S3.presence.pos = 2; S3.actionsLeft = 2; S3.pressure = 3;
+  assert(g3.steady({ roll: 1 }).test.success); assert.strictEqual(S3.presence.pos, 1); assert.strictEqual(S3.presence.comfortPushes, 1);
+  S3.presence.pos = 0; S3.actionsLeft = 1; g3.steady({ roll: 1 }); assert.strictEqual(S3.presence.pos, 0); assert.strictEqual(S3.presence.comfortPushes, 1, 'no push counted at the start');
+  S3.presence.pos = 2; S3.actionsLeft = 1; S3.hand = ['bread']; S3.deck = S3.deck.filter(function (x) { return x !== 'bread'; }); S3.pressure = 3;
+  assert(g3.play('bread').ok); assert.strictEqual(S3.pressure, 2); assert.strictEqual(S3.presence.pos, 0); assert.strictEqual(S3.presence.offerings, 1);
+  // late nights: 1 extra step each night from night 5, even on a non-footprint event
+  var g4 = fresh(34), S4 = g4.state; while (S4.round < 4) { S4.pressure = 0; S4.c1 = 0; S4.pov = 0; nextNight(g4, 'voice'); }
+  S4.presence.pos = 0; S4.c1 = 0; S4.pressure = 0; var fc = g4.presenceForecast(); S4.events = S4.events.filter(function (x) { return x !== 'lights'; }); S4.events.unshift('lights');
+  fc = g4.presenceForecast(); assert(fc.late && fc.steps.total === 1 && !fc.visit);
+  nextNight(g4, 'lights'); assert.strictEqual(S4.round, 5); assert.strictEqual(S4.presence.pos, 1, 'late night extra step');
+  // forecast / visit warning: Window + footprint next
+  S4.presence.pos = 2; S4.events = S4.events.filter(function (x) { return x !== 'silence'; }); S4.events.unshift('silence'); assert(g4.presenceForecast().visit, 'visit warning');
+  S4.presence.pos = 1; assert(g4.presenceForecast().visit, 'Yard + footprint + late = visit');
+  // off = v0.2 exactly
+  var go = fresh(35, P_OFF); assert.strictEqual(go.state.presence, null); assert(go.cfg.deck.some(function (c) { return c.id === 'kompot'; }));
+  assert.strictEqual(go.cfg.events.filter(function (e) { return e.id === 'handle'; })[0].pressure, 2); assert.strictEqual(go.presenceForecast(), null);
+  // token (Variant 2, parked) falls back to the track rules and says so in the stats
+  var gt = fresh(36, P_TOKEN); assert.strictEqual(gt.cfg.presenceMode, 'track'); assert.strictEqual(gt.state.presence.asked, 'token');
+  // direction is copy only: same seed, same game
+  var a1 = playOne(77, 'smart', 'max', { cfg: CONFIG }), b1 = playOne(77, 'smart', 'max', { cfg: P_B });
+  assert.deepStrictEqual(a1.state.log, b1.state.log, 'direction A/B does not change the rules');
 })();
 // Question costs (Narrative Writer's sentences: Being 3, Companion 4, Past 2)
 assert.deepStrictEqual(CONFIG.threads.map(function (t) { return t.cost; }), [3, 4, 2], 'Question costs match the tutorial copy');
@@ -246,6 +305,7 @@ runs.forEach(function (r) {
   KIT_FIELDS.forEach(function (c) { assert(Stats.COLUMNS.indexOf(c) >= 0, 'kit field in CSV: ' + c); });
   assert(r.outcomeScene, 'outcome scene recorded');
   assert(/^n1:/.test(r.perRound), 'per-night detail recorded'); assert(r.rules !== undefined);
+  if (r.presenceMode !== 'off') assert(r.presenceByNight.split(' ').length === +r.roundsPlayed || r.endReason === 'pressure', 'presence per night');
 });
 var csv = Stats.toCSV(runs), json = JSON.parse(Stats.toJSON(runs));
 assert.strictEqual(csv.trim().split('\n').length, runs.length + 1, 'csv rows');

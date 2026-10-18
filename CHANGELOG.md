@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.3: The Approach, Variant 1 (2026-10-18, Greg)
+**Rules (spec: Notion "The Approach", flag `presence.mode` = off | track | token, default track):**
+- Approach track Treeline → Yard → Window → Door beside the Dread track; the next night event is face up.
+- Footprints on Footsteps, The Gate Creaks, The Silence, The Door Handle; The Door Handle is now Dread +1.
+- Night order: event → footprint step(s) (+1 on nights 5-6) → visit check (Bar blocks) → Dread-6 check.
+- Treeline Search success: Presence 1 closer. Comfort success: Presence 1 back.
+- Visit: Dread +1, COMPANION 1 one zone out, Presence back to the Treeline; a Bar blocks it (Bar used, Presence to the Yard). A Bar is used by whichever comes first.
+- Kompot → **Bread and Salt** (Calm): Dread −1, Presence back to the start. The guided Night 1 now deals it.
+- `off` = v0.2 exactly; `token` (Variant 2) is parked and falls back to track.
+- Design gaps took the simplest reading behind config; see README "Questions for Tomek".
+
+**UI:** Approach track + marker, next-event card with hover zoom, visit warning, visit banner (Zosia's door line, seeded), Bar-stopped banner, late-nights banner, Presence lines in tooltips and the roll dialog, How to play section, debug line. Tokens are clickable (they click their zone).
+
+**Copy (Zosia):** both directions (A domowik, B zmora) verbatim in `data/ui-text.js → presence.dirs`, `?presence=A|B`, default A. Tour voice lines for the guided Night 1 added verbatim. The step numbers in her note matched our steps (4 zones, 5 Search, 6 add cards, 9 Comfort, 10 End turn), so no topic remapping was needed.
+
+**Art (Ola v0.3 + 10 art-fit fixes):** re-imported from the manifest (120 files, 0 missing; PNG-only files converted to WebP). `data/board-layout.js` now uses the manifest boxes, with only the remaining overrides kept. Decisions applied: nights 5-6 cross-fade `sky_late_overlay` (CSS opacity; `presence.lateBoard: 'swap'` / `?late=swap` uses `board_bg_late`); hand cards use `card_frame_hand`/`card_panels_hand` (full frame for zoom and the roll dialog); fx at 8 fps with a single frame under prefers-reduced-motion. Art-fit report updated, with mismatches listed by box name.
+
+**Stats:** presenceMode, presenceDirection, presenceByNight, presenceVisits, presenceVisitsBlocked, offeringsPlayed, comfortPushes, searchPulls, presenceSteps, presenceClosest; perRound `|P<pos>`.
+
+**Tests:** smoke (mixed presence modes + targeted v0.3 rules), text (copy verbatim, A/B complete, tour lines), `tools/sim-presence.js`, Playwright v0.3 checks + screenshots 24-28 (0 console errors), `tests/dist-check.js`.
+
 ## v2: clarity pass + art (2026-10-18, Greg)
 
 - Art manifest update (92 assets): the importer now reads the cast from `manifest.cast` and never references `_retired/` or `manifest.retired`, so the thread icon is excluded. Test added. v0.3 (The Approach: Presence track, face-up next event) is approved for after v0.2 and not started.

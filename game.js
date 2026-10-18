@@ -39,6 +39,17 @@
     if (r.startZeroClues) cfg.startProgress = 0;
     if (r.chairForPierogi) cfg.deck = base.deck.map(function (c) { return c.id === 'pierogi' ? base.chairCard : c; });
     cfg.uiActions = (base.uiActions || []).filter(function (a) { return !(r.cutDrawAndHold && (a === 'draw' || a === 'holdDoor')); });
+    // v0.3 The Approach: presence.mode 'off' | 'track' | 'token' ('token' = Variant 2, parked: runs the track rules)
+    var pr = base.presence || { mode: 'off' }, mode = pr.mode || 'off';
+    cfg.presenceMode = mode === 'off' ? 'off' : 'track';
+    cfg.presenceModeAsked = mode;
+    if (cfg.presenceMode !== 'off') {
+      var oc = pr.offeringCard;
+      if (oc) cfg.deck = cfg.deck.map(function (c) { return c.id === oc.replaces ? oc : c; });
+      var ov = pr.eventOverrides || {};
+      cfg.events = base.events.map(function (e) { var x = Object.assign({}, e, ov[e.id] || {}); x.footprint = (pr.footprintEvents || []).indexOf(e.id) >= 0; return x; });
+      if (pr.tutorialHand) cfg.tutorialHand = pr.tutorialHand;
+    }
     return cfg;
   }
 
@@ -66,6 +77,7 @@
       deck: [], hand: [], discard: [], removed: [],
       events: [], eventsSeen: [],
       bars: 0,
+      presence: null,          // v0.3: {pos, visits, blocked, offerings, comfortPushes, searchPulls, steps, closest, byNight[]}
       torch: 0,                // difficulty reduction for next Investigate this round
       silence: false,
       helps: { c1: { used: false, uses: 0 }, c2: { used: false, uses: 0 } },
@@ -83,6 +95,9 @@
       log: []
     };
 
+    var PR = cfg.presence || {}, PON = cfg.presenceMode !== 'off', DOOR = PON ? PR.spaces.length - 1 : 0;
+    var copyRng = makeRng((seed ^ 0x5eed1e55) >>> 0); // separate seeded stream for picking copy lines (does not change dice/deck)
+    if (PON) S.presence = { mode: cfg.presenceMode, asked: cfg.presenceModeAsked, pos: PR.start || 0, visits: 0, blocked: 0, offerings: 0, comfortPushes: 0, searchPulls: 0, steps: 0, closest: PR.start || 0, byNight: [], lastVisit: null };
     function log(msg, kind) { S.log.push({ round: S.round, kind: kind || 'info', text: msg }); }
     function card(id) { for (var i = 0; i < cfg.deck.length; i++) if (cfg.deck[i].id === id) return cfg.deck[i]; return null; }
     function zoneName(i) { return cfg.zones[i].name; }
@@ -112,7 +127,8 @@
       var rs = S._roundStart || { actions: {}, plays: 0, commits: 0, helps: 0 }, acts = {};
       Object.keys(S.stats.actions).forEach(function (k) { var d = S.stats.actions[k] - (rs.actions[k] || 0); if (d) acts[k] = d; });
       S.perRound.push({ round: S.round, actions: acts, plays: S.stats.plays - rs.plays, commits: S.stats.commits - rs.commits,
-        helps: S.helps.c1.uses + S.helps.c2.uses - rs.helps, dread: S.pressure, clues: S.progress, c1: zoneIds[S.c1], pov: zoneIds[S.pov] });
+        helps: S.helps.c1.uses + S.helps.c2.uses - rs.helps, dread: S.pressure, clues: S.progress, c1: zoneIds[S.c1], pov: zoneIds[S.pov], presence: PON ? S.presence.pos : null });
+      if (PON) S.presence.byNight.push(S.presence.pos);
     }
 
     function drawCards(n, why) {
@@ -134,6 +150,47 @@
         log('COMPANION 1: ' + zoneName(before) + ' → ' + zoneName(S.c1) + ' (' + why + ')', delta > 0 ? 'bad' : 'good');
       }
     }
+    // ---------- v0.3 Presence ----------
+    function setPresence(to, src) {
+      var P = S.presence, from = P.pos; to = Math.max(0, Math.min(DOOR, to));
+      if (to === from) return 0;
+      P.pos = to; if (to > from) P.steps += to - from; P.closest = Math.max(P.closest, to);
+      S.feed.push({ round: S.round, type: 'presence', delta: to - from, from: from, to: to, src: src || {} });
+      log('Presence: ' + PR.spaces[from] + ' → ' + PR.spaces[to] + ' (' + (src && src.type || '') + ')', to > from ? 'bad' : 'good');
+      return to - from;
+    }
+    /** step the Presence n spaces closer; a visit resolves if it reaches the Door */
+    function presenceStep(n, src) {
+      if (!PON || ended() || n <= 0) return;
+      setPresence(S.presence.pos + n, src);
+      if (S.presence.pos >= DOOR) presenceVisit(src);
+    }
+    function presenceVisit(src) {
+      var P = S.presence;
+      if (S.bars > 0) { // a Bar stops the visit (and is used up)
+        S.bars--; P.blocked++;
+        S.feed.push({ round: S.round, type: 'barUsed', src: { type: 'visit' } });
+        S.feed.push({ round: S.round, type: 'visitBlocked', src: src || {} });
+        P.lastVisit = { round: S.round, blocked: true };
+        log('VISIT stopped by a Bar. The Presence falls back.', 'good');
+        setPresence(PR.barBlockReturnTo, { type: 'barHeld' });
+        return;
+      }
+      P.visits++;
+      var line = copyRng.int(PR.doorLineCount || 1);
+      P.lastVisit = { round: S.round, blocked: false, line: line };
+      S.feed.push({ round: S.round, type: 'visit', line: line, src: src || {} });
+      log('VISIT at the Door: Dread +' + PR.visitDread + ', COMPANION 1 pulled outward.', 'bad');
+      moveC1(PR.visitC1Out, 'Presence visit', { type: 'visit' });
+      changePressure(PR.visitDread, 'Presence visit', { type: 'visit' });
+      if (!ended()) setPresence(PR.visitReturnTo, { type: 'visitDone' });
+    }
+    function presenceNightSteps(ev, night) {
+      var fp = ev && ev.footprint ? (PR.footprintSteps || 1) : 0;
+      var late = night >= PR.lateFromNight && (!PR.lateStepNeedsFootprint || fp) ? (PR.lateExtraSteps || 0) : 0;
+      return { footprint: fp, late: late, total: fp + late };
+    }
+
     function gainProgress(n, why, src) { S.feed.push({ round: S.round, type: 'progress', delta: n, from: S.progress, to: S.progress + n, src: src || {} }); S.progress += n; S.progressEarned += n; log('+' + n + ' progress (' + why + '). Total ' + S.progress + '.', 'good'); }
 
     // ---------- Setup ----------
@@ -175,6 +232,17 @@
       var ev = null; for (var i = 0; i < cfg.events.length; i++) if (cfg.events[i].id === evId) ev = cfg.events[i];
       S.eventsSeen.push(evId);
       S.lastEvent = { id: evId, cancelled: false };
+      resolveEvent(ev);
+      // v0.3 night order: 1 event (a Bar cancels it) > 2 footprint step(s) > 3 visit at the Door (a Bar blocks it) > 4 Dread 6 check
+      // (Dread 6 ends the night at once wherever it happens; steps after that would change nothing.)
+      if (PON && !ended()) {
+        var st = presenceNightSteps(ev, S.round);
+        S.lastEvent.steps = st;
+        if (st.total) presenceStep(st.total, { type: st.footprint ? 'footprint' : 'late', id: ev.id, late: st.late });
+      }
+    }
+    function resolveEvent(ev) {
+      var evId = ev.id;
       if (S.bars > 0) {
         S.bars--; S.lastEvent.cancelled = true; S.feed.push({ round: S.round, type: 'barUsed', src: { type: 'event', id: evId } });
         log('NIGHT: ' + ev.name + ' — cancelled by a Bar (Bars left: ' + S.bars + ').', 'good');
@@ -286,13 +354,15 @@
       return null;
     }
 
-    function doInvestigate(zoneIdx, label, commits, helps, forcedRoll) {
+    function doInvestigate(zoneIdx, label, commits, helps, forcedRoll, fromCard) {
       var z = cfg.zones[zoneIdx];
       var diff = Math.max(0, z.investigateDifficulty - S.torch);
       if (S.torch) log('Torch: difficulty ' + z.investigateDifficulty + ' → ' + diff + '.');
       S.torch = 0;
       var r = runTest(label + ' (' + z.name + ')', 'INSIGHT', diff, commits, helps, forcedRoll);
       if (r.success && !ended()) gainProgress(z.progress + (r.strong ? cfg.strongInvestigateBonus : 0), 'Investigate ' + z.name + (r.strong ? ', strong' : ''), { type: 'search', id: z.id, strong: r.strong });
+      // v0.3 knowledge price: a successful Search of the Treeline draws the Presence closer (visit resolves at once)
+      if (PON && r.success && !ended() && zoneIdx === zoneIds.length - 1 && (fromCard ? PR.searchPullCountsCards : true)) { S.presence.searchPulls++; presenceStep(PR.treelineSearchSteps, { type: 'searchPull', id: z.id }); }
       return r;
     }
 
@@ -304,6 +374,14 @@
       previewTest: previewTest,
       helpEligible: helpEligible,
       helpBonus: helpBonus,
+      /** v0.3: steps the Presence takes at the start of the NEXT night (face-up next event + late nights), and whether that means a visit */
+      presenceForecast: function () {
+        if (!PON || S.round >= cfg.rounds) return null;
+        var nid = S.events[0], nev = null; for (var i = 0; i < cfg.events.length; i++) if (cfg.events[i].id === nid) nev = cfg.events[i];
+        var st = presenceNightSteps(nev, S.round + 1);
+        return { nextEvent: nid, steps: st, reach: Math.min(DOOR, S.presence.pos + st.total), visit: S.presence.pos + st.total >= DOOR, late: S.round + 1 >= PR.lateFromNight };
+      },
+      nextEventId: function () { return S.round < cfg.rounds ? S.events[0] || null : null; },
 
       move: function (toIdx) {
         var e = needAction(); if (e) return err(e);
@@ -326,6 +404,8 @@
           // a strong success lowers it by strongSteadyBonus more. (Matches the v0.2 sim fix.)
           moveC1(-1, 'Steady', { type: 'comfort' });
           changePressure(-(cfg.steadyPressureRelief + (r.strong ? cfg.strongSteadyBonus : 0)), 'Steady' + (r.strong ? ', strong' : ''), { type: 'comfort', strong: r.strong });
+          // v0.3: a Comfort success also turns the Presence back (not past the start)
+          if (PON && !ended() && setPresence(S.presence.pos - PR.comfortPushBack, { type: 'comfortPush' })) S.presence.comfortPushes++;
         }
         return ok({ test: r });
       },
@@ -366,10 +446,10 @@
         log('PLAY ' + c.name + ': ' + c.text);
         var res = ok();
         switch (c.effect) {
-          case 'investigateYardFromHouse': res.test = doInvestigate(1, c.name, p.commits, p.helps, p.roll); break;
+          case 'investigateYardFromHouse': res.test = doInvestigate(1, c.name, p.commits, p.helps, p.roll, true); break;
           case 'investigateAnyZone':
             var zi = p.zone == null ? S.pov : p.zone;
-            res.test = doInvestigate(zi, c.name, p.commits, p.helps, p.roll); break;
+            res.test = doInvestigate(zi, c.name, p.commits, p.helps, p.roll, true); break;
           case 'placeBar': S.bars++; S.feed.push({ round: S.round, type: 'bar', delta: 1, src: { type: 'card', id: c.id } }); log('Bar placed (Bars: ' + S.bars + ').', 'good'); break;
           case 'progressObject': gainProgress(S.flags.key === 'SHARED' ? c.valueShared : c.value, c.name + (S.flags.key === 'SHARED' ? ', SHARED' : ''), { type: 'card', id: c.id }); break;
           case 'progress': gainProgress(c.value, c.name, { type: 'card', id: c.id }); break;
@@ -381,6 +461,11 @@
             var w = p.helpToReady || (S.helps.c1.used ? 'c1' : 'c2');
             if (S.helps[w].used) { S.helps[w].used = false; log((w === 'c1' ? 'COMPANION 1' : 'COMPANION 2') + "'s Help is ready again.", 'good'); }
             else log('No used Help to ready.');
+            break;
+          case 'offering': // v0.3 Bread and Salt: Dread -1 and the Presence goes back to the start
+            S.presence.offerings++;
+            changePressure(c.value, c.name, { type: 'card', id: c.id });
+            if (!ended()) { if (!setPresence(PR.start || 0, { type: 'offering', id: c.id })) S.feed.push({ round: S.round, type: 'presence', delta: 0, from: S.presence.pos, to: S.presence.pos, src: { type: 'offering', id: c.id } }); }
             break;
           case 'c1InwardAndCalm': moveC1(-1, c.name, { type: 'card', id: c.id }); changePressure(c.value, c.name, { type: 'card', id: c.id }); break;
           default: log('Unknown effect ' + c.effect, 'warn');

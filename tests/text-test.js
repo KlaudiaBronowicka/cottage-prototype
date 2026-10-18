@@ -48,3 +48,28 @@ console.log('ALL TEXT CHECKS PASSED');
   ['POV', 'C1', 'C2'].forEach(function (s) { if (!AM.cast || !AM.cast.slots[s]) throw new Error('cast slot missing from manifest: ' + s); });
   console.log('ART MANIFEST CHECK PASSED (no retired assets; cast from manifest.cast)');
 })();
+
+// v0.3 The Approach copy: both directions complete, verbatim against Zosia's file, door lines match config
+(function () {
+  var fs = require('fs'), UT2 = require('../data/ui-text.js'), CFG = require('../config.js');
+  var D = UT2.presence.dirs, keys = function (o) { return Object.keys(o).sort().join(','); };
+  if (keys(D.A) !== keys(D.B)) throw new Error('presence directions A/B have different keys');
+  ['A', 'B'].forEach(function (d) {
+    if (D[d].door.length !== CFG.presence.doorLineCount) throw new Error('door lines ' + d + ' != doorLineCount');
+    CFG.presence.footprintEvents.forEach(function (e) { if (!D[d].tease[e]) throw new Error('missing tease ' + d + ' ' + e); });
+  });
+  var md = fs.readFileSync(__dirname + '/../docs/copy/v03-approach-copy-zosia.md', 'utf8');
+  var unslot = function (s) { return s.replace(/\{C1\}/g, 'COMPANION 1').replace(/\{C2\}/g, 'COMPANION 2').replace(/\{POV\}/g, 'POV').replace(/\{HOST\}/g, 'HOST'); };
+  var n = 0;
+  ['A', 'B'].forEach(function (d) {
+    var X = D[d], all = X.what.concat(X.door, [X.c1, X.turnAway.comfort, X.turnAway.offering, X.turnAway.bar, X.late, X.search, X.offeringAction]).concat(Object.keys(X.tease).map(function (k) { return X.tease[k]; }));
+    all.forEach(function (line) {
+      var l = unslot(line).replace(/^(COMPANION [12]|POV): /, '');
+      if (md.indexOf(l) < 0) throw new Error('not verbatim in Zosia copy (' + d + '): ' + l);
+      n++;
+    });
+  });
+  var steps = UT2.onboarding.steps.filter(function (s) { return s.voice; }).length;
+  if (steps !== 10) throw new Error('all 10 tour steps should have Zosia voice lines, found ' + steps);
+  console.log('PRESENCE COPY CHECK PASSED (' + n + ' lines verbatim, A and B complete; 10/10 tour voice lines)');
+})();

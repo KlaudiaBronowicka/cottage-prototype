@@ -42,7 +42,9 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   assert(/Success/.test(await page.textContent('#rollResult')), 'tutorial first Search succeeds');
   await shot('05-tutorial-step7-clue');
   await page.click('#coachNext');
-  await page.click('#card-kompot'); await page.waitForTimeout(300);
+  var tutCard = await page.evaluate(function () { return window.__game.cfg.tutorialHand[1]; }); // Bread and Salt with the Presence on
+  assert(tutCard === 'bread', 'tutorial play step uses Bread and Salt (presence on)');
+  await page.click('#card-' + tutCard); await page.waitForTimeout(300);
   await shot('06-tutorial-step8-play-card');
   await page.click('#zoomPlay'); await page.waitForTimeout(500);
   await page.click('#coachNext');
@@ -61,10 +63,25 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   assert(await page.$('#coachBubble'), 'Replay tutorial from the menu'); await page.click('#coachSkip');
   assert(await page.$eval('#coach', function (e) { return e.classList.contains('hidden'); }), 'tutorial skippable');
 
+  // click a zone where nothing else (token, help, hand card) is on top, like a player would
+  async function clickZone(id) {
+    var pt = await page.evaluate(function (id) {
+      var z = document.getElementById('zone-' + id), r = z.getBoundingClientRect();
+      for (var fy = 0.15; fy < 0.95; fy += 0.1) for (var fx = 0.1; fx < 0.95; fx += 0.1) {
+        var x = r.left + r.width * fx, y = r.top + r.height * fy, e = document.elementFromPoint(x, y);
+        if (e && z.contains(e)) return { x: x, y: y };
+      }
+      return null;
+    }, id);
+    assert(pt, 'zone ' + id + ' has a clickable spot');
+    if (pt) await page.mouse.click(pt.x, pt.y);
+  }
   // ---------- 2) full runs ----------
   var outcomes = {}, dragPlays = 0;
   for (var run = 0; run < 12; run++) {
-    await page.goto(url + '?tutorial=0' + (run === 0 ? '&skin=A' : ''));
+    // v0.3: presence track (A) by default; also off, direction B, token (parked → track) and the board-swap late look
+    var pres = ['', '&presence=off', '&presence=B', '&presence=token', '', '&presence=track,B&late=swap'][run % 6];
+    await page.goto(url + '?tutorial=0' + (run === 0 ? '&skin=A' : '') + pres);
     await page.fill('#inSeed', String(1000 + run));
     if (run % 2 === 0) {
       await page.click('#bStart');
@@ -79,6 +96,9 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
     } else { await page.click('#bSkip'); await page.click('#bGo'); }
     assert(await page.$('#act-end'), 'reached the encounter');
     await page.waitForTimeout(2700); // night banner
+    var hasTrack = !!(await page.$('#approach')), hasNext = !!(await page.$('#nextEvent'));
+    assert(hasTrack === (pres !== '&presence=off') && hasNext === hasTrack, 'Approach track + next event shown iff presence on (' + pres + ')');
+    if (/B/.test(pres)) assert(/zmora/.test(await page.getAttribute('#approach', 'data-tip')), 'direction B names the zmora');
     if (run === 3) await shot('09-encounter-1280');
     if (run === 1) { // debug panel (key D) shows the state, then hide it again
       await page.keyboard.press('d'); assert(/seed <b>1001/.test(await page.innerHTML('#debug')), 'debug panel');
@@ -112,8 +132,8 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
         }
         else { await page.click('#card-' + cid); await page.click('#zoomPlay'); }
       } else if (st.c1 > 0 || st.p >= 4 || r === 3) await page.click('#act-steady');
-      else if (r === 4 && st.pov < 2 && run % 4 !== 0) await page.click('#zone-' + ['house', 'yard', 'treeline'][st.pov + 1]);
-      else if (r === 5 && st.pov > 0) await page.click('#zone-' + ['house', 'yard', 'treeline'][st.pov - 1]);
+      else if (r === 4 && st.pov < 2 && run % 4 !== 0) await clickZone(['house', 'yard', 'treeline'][st.pov + 1]);
+      else if (r === 5 && st.pov > 0) await clickZone(['house', 'yard', 'treeline'][st.pov - 1]);
       else if (r === 9) await page.click('#act-end');
       else await page.click('#act-investigate');
       await page.waitForTimeout(120);
@@ -142,7 +162,7 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   assert(nRuns >= 12, 'runs saved: ' + nRuns);
   await page.click('#bStats2'); await page.click('#sCopyC'); await page.waitForTimeout(200);
   var csv = await page.inputValue('#sOut'), header = csv.split('\n')[0];
-  ['progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice', 'outcome', 'outcomeScene', 'roundsPlayed', 'playsVsCommits', 'rules', 'tutorial', 'perRound', 'unusedActions'].forEach(function (f) { assert(header.split(',').indexOf(f) >= 0, 'CSV has ' + f); });
+  ['progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice', 'outcome', 'outcomeScene', 'roundsPlayed', 'playsVsCommits', 'rules', 'tutorial', 'perRound', 'unusedActions', 'presenceMode', 'presenceDirection', 'presenceByNight', 'presenceVisits', 'presenceVisitsBlocked', 'offeringsPlayed', 'comfortPushes', 'searchPulls'].forEach(function (f) { assert(header.split(',').indexOf(f) >= 0, 'CSV has ' + f); });
   await shot('15-stats');
   await page.click('#ovClose');
   // how to play + menu
@@ -165,6 +185,36 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   await page.click('#card-' + (await page.evaluate(function () { return window.__game.state.hand[0]; }))); await page.waitForTimeout(200);
   await shot('20-encounter-1920-card-zoom', { wait: 0 });
   var bad2 = await brokenImages(); assert(!bad2.length, 'images load at 1920');
+
+  // ---------- 4) v0.3 The Approach ----------
+  await page.goto(url + '?seed=5&tutorial=0'); await page.click('#bSkip'); await page.click('#bGo'); await page.waitForTimeout(2700);
+  await page.hover('#nextEvent'); await page.waitForTimeout(500);
+  assert(await page.$('#zoom.nezoom'), 'next event zooms on hover');
+  await shot('24-approach-track-next-event', { wait: 0 });
+  // search preview + Comfort preview carry the Presence lines
+  await page.evaluate(function () { var S = window.__game.state; S.pov = 2; window.__ui.renderEncounter(); });
+  assert(/closer/.test(await page.getAttribute('#act-investigate', 'data-tip')), 'Treeline Search tip has the Presence line');
+  assert(/turns the domowik back/.test(await page.getAttribute('#act-steady', 'data-tip')), 'Comfort tip has the Presence line');
+  await page.click('#act-investigate'); await page.waitForTimeout(300); assert(await page.$('#presencePreview'), 'roll dialog previews the Presence step'); await page.click('#rollCancel');
+  // visit warning + late nights (sky cross-fade)
+  await page.evaluate(function () { var g = window.__game, S = g.state; S.round = 5; S.presence.pos = 2; S.pov = 0; window.__ui.renderEncounter(); });
+  await page.waitForTimeout(2800);
+  assert(await page.$('#visitWarn') && await page.$('#lateBanner') && await page.$('#skyLate.on'), 'visit warning, late banner, late sky');
+  await shot('25-visit-warning-late-nights', { wait: 0 });
+  // a visit: Window + successful Treeline Search
+  await page.evaluate(function () { var g = window.__game, S = g.state; S.pov = 2; S.bars = 0; S.torch = 9; S.actionsLeft = 2; S.c1 = 0; g.investigate({ roll: 1 }); window.__ui.renderEncounter(); });
+  await page.waitForSelector('.nightBanner.visit', { timeout: 6000 });
+  assert(/The domowik is at the Door/i.test(await page.textContent('.nightBanner.visit')), 'visit banner with Zosia\'s door line');
+  await shot('26-visit-banner', { wait: 300 });
+  await page.goto(url + '?seed=5&tutorial=0&presence=B'); await page.click('#bSkip'); await page.click('#bGo'); await page.waitForTimeout(2700);
+  await page.click('#btnMenu'); await page.click('#mHow'); await page.waitForTimeout(200);
+  assert(/zmora/.test(await page.textContent('#howPresence')), 'How to play explains the Presence (B)');
+  await shot('27-how-to-play-presence-B');
+  await page.click('#ovClose');
+  await page.goto(url + '?seed=5&tutorial=0&presence=off'); await page.click('#bSkip'); await page.click('#bGo'); await page.waitForTimeout(2700);
+  assert(!(await page.$('#approach')) && (await page.$('#card-kompot') || true), 'presence off = v0.2 board');
+  await shot('28-presence-off-v02');
+  var bad3 = await brokenImages(); assert(!bad3.length, 'images load (v0.3)');
 
   assert(dragPlays > 0, 'some cards were played by drag'); console.log('UI runs: 12 + tutorial. Outcomes seen:', JSON.stringify(outcomes), '· runs saved', nRuns, '· drag plays', dragPlays);
   if (errors.length) { console.log('ERRORS:\n' + errors.join('\n')); process.exitCode = 1; } else console.log('UI CLICK-THROUGH PASSED (no console errors)');

@@ -29,7 +29,11 @@ var UI_TEXT = {
     STEP_DAWN: 'Answer the questions: spend clues',
     STEP_ADD_CARDS: 'Add to this roll',
     STAT_I: 'INSIGHT', STAT_N: 'NERVE', STAT_C: 'CARE',
-    ZONE_HOUSE: 'House', ZONE_YARD: 'Yard', ZONE_TREELINE: 'Treeline'
+    ZONE_HOUSE: 'House', ZONE_YARD: 'Yard', ZONE_TREELINE: 'Treeline',
+    // v0.3 The Approach. TERM_PRESENCE is reskinned per direction (presence.dirs.<A|B>.terms below); this is the slot-generic default.
+    TERM_PRESENCE: 'the Presence', TERM_APPROACH: 'Approach',
+    TRACK_APPROACH_1: 'Treeline', TRACK_APPROACH_2: 'Yard', TRACK_APPROACH_3: 'Window', TRACK_APPROACH_4: 'Door', // same in A and B (Tomek)
+    TERM_NEXT_NIGHT: 'Next night'
   },
 
   // ---------- Display names ----------
@@ -51,6 +55,8 @@ var UI_TEXT = {
     chair:   { cat: 'protect', name: 'Chair Under the Handle', text: 'Bar the door: cancel the next {t.TERM_NIGHT} event. Max 1 {t.TERM_BAR}.', flavour: 'Wedge it tight. If it holds till morning, it was a good chair.' },
     torch:   { cat: 'utility', name: 'Torch',                 text: 'Your next {t.ACT_SEARCH} this {t.TERM_NIGHT} needs 1 less.', flavour: 'The beam stops exactly where the trees begin.' },
     phone:   { cat: 'utility', name: 'Phone at 4%',           text: 'Draw 2 cards.', flavour: "One bar of signal. One message you shouldn't read." },
+    // v0.3 (presence on): replaces Kompot. Flavour = the direction's offering line (Tomek-approved), via '@dir:'.
+    bread:   { cat: 'calm',    name: 'Bread and Salt',        text: '{T.TERM_DREAD} −1 and {t.TERM_PRESENCE} goes back to the {t.TRACK_APPROACH_1}.', flavour: '@dir:offeringAction' },
     pierogi: { cat: 'utility', name: 'Burnt Pierogi',         text: 'Ready a used {t.TERM_HELP} again.', flavour: 'Slightly burned. Still the best thing tonight.' } // only if rules.chairForPierogi is OFF
   },
   events: {
@@ -92,6 +98,7 @@ var UI_TEXT = {
     handTitle: 'Your {t.TERM_HAND}', handTip: 'Each card: PLAY it for its effect (1 {t.TERM_ACTION}) or add it to a {t.TERM_ROLL} for its icons (free). Not both.',
     eventTip: 'Tonight: {event}. {effect}',
     eventCancelled: 'Barred: cancelled.',
+    tonight: 'Tonight',
     logTitle: 'What happened',
     hintsOff: 'Hide hints'
   },
@@ -294,14 +301,103 @@ var UI_TEXT = {
       { id: 'goal',      target: ['goalBanner', 'nightCounter'], text: 'Make it to {t.TERM_DAWN}. Find {t.TERM_CLUES}. Answer what you can.', voice: '{C2}: Six hours till light. We can do six hours.' },
       { id: 'questions', target: ['questions'], text: 'These are tonight\'s {t.TERM_QUESTIONS}. At {t.TERM_DAWN}, you spend {t.TERM_CLUES} to answer them.', voice: '{POV}: Something keeps circling this house. I want to know what.' },
       { id: 'event',     target: ['nightEvent', 'dread'], text: 'Each {t.TERM_NIGHT} starts with something outside. This raised {t.TERM_DREAD} to 1. At {max}, the {t.TERM_NIGHT} breaks.', voice: '{C1}: It\'s back. Under the window.' },
-      { id: 'zones',     target: ['board'], text: 'Searching further out finds more {t.TERM_CLUES}, but it\'s more dangerous.' },
-      { id: 'search',    target: ['act-investigate'], allow: ['act-investigate'], await: 'trayOpen', text: '{T.ACT_SEARCH} for {t.TERM_CLUES} here. You have 2 {t.TERM_ACTIONS} each {t.TERM_NIGHT}.' },
-      { id: 'add',       target: ['rollAdd'], allow: ['tray'], await: 'roll', text: 'You can add matching cards to this {t.TERM_ROLL}: +1 each. Added cards are discarded.' },
+      { id: 'zones',     target: ['board'], text: 'Searching further out finds more {t.TERM_CLUES}, but it\'s more dangerous.', voice: '{C2}: The answers are out by the trees. So is whatever\'s walking.' },
+      { id: 'search',    target: ['act-investigate'], allow: ['act-investigate'], await: 'trayOpen', text: '{T.ACT_SEARCH} for {t.TERM_CLUES} here. You have 2 {t.TERM_ACTIONS} each {t.TERM_NIGHT}.', voice: '{POV}: Start here, where it\'s warm. Kitchen first.' },
+      { id: 'add',       target: ['rollAdd'], allow: ['tray'], await: 'roll', text: 'You can add matching cards to this {t.TERM_ROLL}: +1 each. Added cards are discarded.', voice: '{C2}: Use what we found today. That\'s what it\'s for.' },
       { id: 'clue',      target: ['rollResult', 'clues'], allow: ['tray'], text: 'You found a {t.TERM_CLUE}.', voice: '{POV}: The footprints stop at the door. Right at the door.' },
-      { id: 'play',      target: ['card-kompot'], allow: ['card-kompot'], await: 'play:kompot', text: 'Or play a card for its effect. This costs an {t.TERM_ACTION}.', voice: '{C2}: Drink. The {HOST} said don\'t waste it, and I\'m scared of her.' },
-      { id: 'comfort',   target: ['tok-C1', 'act-steady'], text: 'If the voice pulls {C1} outside, {t.ACT_COMFORT} brings her back. Bring her home by {t.TERM_DAWN}.' },
-      { id: 'end',       target: ['act-end', 'deckPile'], allow: ['act-end'], await: 'endTurn', text: 'Out of {t.TERM_ACTIONS}. End the {t.TERM_NIGHT}: you draw a card. Five more {t.TERM_NIGHTS} till {t.TERM_DAWN}.' }
+      { id: 'play',      target: ['card-@tutorialCard'], allow: ['card-@tutorialCard'], await: 'play:@tutorialCard', // @tutorialCard = CONFIG.tutorialHand[1] (Kompot, or Bread and Salt with the Presence on)
+                    text: 'Or play a card for its effect. This costs an {t.TERM_ACTION}.', voice: '{C2}: Drink. The {HOST} said don\'t waste it, and I\'m scared of her.' },
+      { id: 'comfort',   target: ['tok-C1', 'act-steady'], text: 'If the voice pulls {C1} outside, {t.ACT_COMFORT} brings her back. Bring her home by {t.TERM_DAWN}.', voice: '{POV}: If she goes outside, I talk her home. Gently.' },
+      { id: 'end',       target: ['act-end', 'deckPile'], allow: ['act-end'], await: 'endTurn', text: 'Out of {t.TERM_ACTIONS}. End the {t.TERM_NIGHT}: you draw a card. Five more {t.TERM_NIGHTS} till {t.TERM_DAWN}.', voice: '{C2}: One hour down. Five to go.' }
     ]
+  },
+
+  // ---------- v0.3 "The Approach" (Tension Pass v0.3 §8 tooltips; Zosia's A/B copy, Tomek-approved) ----------
+  // Used only when CONFIG.presence.mode is not 'off'. Direction: CONFIG.presence.direction or ?presence=A|B.
+  // `overrides` replace the normal string at the same path while the Presence is on (e.g. Door Handle is Dread +1 now).
+  presence: {
+    overrides: {
+      eventEffects: { handle: '{T.TERM_DREAD} +1.' },
+      cards: {
+        rule:  { text: 'Bar the door: stops the next {t.TERM_NIGHT} event or one visit, whichever comes first. Max 1 {t.TERM_BAR}.' },
+        chair: { text: 'Bar the door: stops the next {t.TERM_NIGHT} event or one visit, whichever comes first. Max 1 {t.TERM_BAR}.' }
+      },
+      board: { barTip: 'Barred. Stops the next {t.TERM_NIGHT} event or one visit from {t.TERM_PRESENCE}, whichever comes first.' }
+    },
+    ui: {
+      trackTitle: '{T.TERM_APPROACH}',
+      trackTip: '{T.TERM_PRESENCE} is coming: {t.TRACK_APPROACH_1}, {t.TRACK_APPROACH_2}, {t.TRACK_APPROACH_3}, {t.TRACK_APPROACH_4}. If it reaches the {t.TRACK_APPROACH_4}: {t.TERM_DREAD} +1 and {C1} is pulled outside. A {t.TERM_BAR} stops it.',
+      markerTip: '{T.TERM_PRESENCE}. You can\'t fight it. {T.ACT_COMFORT}, an offering or a {t.TERM_BAR} can turn it away.',
+      spaceTip: '{space}',
+      nextTitle: '{T.TERM_NEXT_NIGHT}',
+      nextTip: 'Coming next {t.TERM_NIGHT}: {event}. Plan for it.',
+      nextNone: '{T.TERM_DAWN} comes next.',
+      footprintTip: 'Footprints: when this happens, {t.TERM_PRESENCE} comes 1 step closer.',
+      lateBanner: 'The {t.TERM_NIGHT} is ending. {T.TERM_PRESENCE} moves faster.',
+      searchPreview: ' Success draws {t.TERM_PRESENCE} 1 step closer.',
+      comfortPreview: ' Success also turns {t.TERM_PRESENCE} back 1 step.',
+      offeringTip: 'PLAY: {T.TERM_DREAD} −1 and {t.TERM_PRESENCE} goes back to the {t.TRACK_APPROACH_1}.',
+      visitWarning: '{T.TERM_PRESENCE} will reach the {t.TRACK_APPROACH_4} next {t.TERM_NIGHT}. Turn it away or bar the door.',
+      visitTitle: '{T.TERM_PRESENCE} is at the {t.TRACK_APPROACH_4}',
+      visitEffect: '{T.TERM_DREAD} +1. {C1} is pulled outside.',
+      blockedTitle: 'The {t.TERM_BAR} held',
+      feedCloser: '{T.TERM_PRESENCE} → {space}: {cause}',
+      feedBack: '{T.TERM_PRESENCE} ← {space}: {cause}',
+      feedOffering: '{T.TERM_PRESENCE} goes back to the {t.TRACK_APPROACH_1}: {cause}',
+      feedVisit: '{T.TERM_PRESENCE} visits: {t.TERM_DREAD} +1, {C1} pulled outside',
+      feedBlocked: 'The {t.TERM_BAR} stopped the visit',
+      cause: { footprint: 'footprints ({event})', late: 'the {t.TERM_NIGHT} is ending', searchPull: 'you searched the {t.ZONE_TREELINE}', comfortPush: '{T.ACT_COMFORT}',
+               offering: '{card}', barHeld: 'the {t.TERM_BAR} held', visitDone: 'it leaves the door' },
+      howTitle: '{T.TERM_PRESENCE}',
+      howRules: [
+        '{T.TERM_PRESENCE} walks the {t.TERM_APPROACH} track: {t.TRACK_APPROACH_1}, {t.TRACK_APPROACH_2}, {t.TRACK_APPROACH_3}, {t.TRACK_APPROACH_4}. You never fight it. You turn it away.',
+        'Night events with footprints bring it 1 step closer; on {t.TERM_NIGHTS} 5 and 6 it takes 1 more step. Searching the {t.ZONE_TREELINE} draws it closer too. The next {t.TERM_NIGHT} event is always shown face up, so you can see it coming.',
+        'At the {t.TRACK_APPROACH_4}: {t.TERM_DREAD} +1 and {C1} is pulled outside, unless a {t.TERM_BAR} is up. {T.ACT_COMFORT} turns it back 1 step; Bread and Salt sends it back to the {t.TRACK_APPROACH_1}.'
+      ]
+    },
+    // Zosia's copy, verbatim (slot names written as {C1}/{C2}/{POV}/{HOST} so they follow the names setting). [brackets] = stage directions.
+    dirs: {
+      A: {
+        label: 'A · the domowik',
+        terms: { TERM_PRESENCE: 'the domowik' },
+        what: ['The guesthouse\'s domowik: a small, old house spirit who lives behind the stove and walks the edge of the holding at night to keep out the voice in the trees.',
+               'The house is being sold and nobody has fed it in months; it comes to the door frightened and sulking, wanting to be noticed, and its alarm is what draws {C1} outside.'],
+        door: ['Three knocks, low on the door, like someone very short. Then the stove goes out.',
+               'Something small rattles the handle, impatient, and every pan in the kitchen rings at once.',
+               'A sigh at the keyhole, old and tired. The kitchen goes cold.'],
+        c1: '{C1}: It sounds lonely. Someone should go out to it.',
+        turnAway: {
+          comfort: '{POV}: [the way the {HOST} talks to the stove] Dziadku, we\'re good guests. Go back to your warm corner.',
+          offering: 'The heel of the bread, salted, and the last of supper, left by the stove. The pacing stops.',
+          bar: 'The chair holds. On the other side, something small checks the door twice, and seems satisfied.'
+        },
+        tease: { footsteps: 'Small steps, circling. Counting the windows.', gate: 'Someone left the gate open. Someone minds.',
+                 silence: 'The stove stops ticking. The house is listening.', handle: 'Something short is reaching for the handle.' },
+        late: 'The sky over the trees goes grey, and the pacing gets faster, as if it knows.',
+        search: '{POV}: Every step I take into the trees, I hear it hurry back toward the house, like I\'ve left a door open.',
+        offeringAction: 'Leave bread and salt by the stove'
+      },
+      B: {
+        label: 'B · the zmora',
+        terms: { TERM_PRESENCE: 'the zmora' },
+        what: ['The zmora: a night spirit that settles on sleepers\' chests, in many Polish accounts the wandering soul of a living person who doesn\'t know they walk.',
+               'It circles the cottage looking for a way in to whoever\'s guilt is heaviest; it isn\'t hateful, it\'s hungry and lost, and it has to be home before dawn.'],
+        door: ['The handle doesn\'t turn. Something comes through the keyhole anyway, thin as a straw.',
+               'A weight settles on the end of the bed. Nobody is sitting there.',
+               'Everyone\'s breath goes short at once, as if the air got heavy.'],
+        c1: '{C1}: [sitting up, eyes open, not awake] I can\'t breathe in here. I need air.',
+        turnAway: {
+          comfort: '{C2}: [softly, by her ear] {C1}. {C1}, wake up. It\'s us.',
+          offering: '{POV}: [whispering into the dark] Come in the morning. I\'ll give you bread and salt. [The weight lifts.]',
+          bar: 'The chair holds, and the key stays half-turned in the lock. Nothing comes through the keyhole.'
+        },
+        tease: { footsteps: 'Bare feet in the wet grass. Nobody\'s shoes are missing.', gate: 'The gate swings. Whoever it is doesn\'t need it.',
+                 silence: 'Even the breathing in the next room stops.', handle: 'The handle won\'t turn. It doesn\'t have to.' },
+        late: 'The sky thins. Whatever is out there is in a hurry now: it has to be back in its own body before light.',
+        search: '{POV}: Out here I can breathe. Back there someone can\'t, and it knows I\'m not watching.',
+        offeringAction: 'Promise it bread in the morning'
+      }
+    }
   },
 
   // ---------- How to play (Clarity Pass §9.4, 153 words) ----------
