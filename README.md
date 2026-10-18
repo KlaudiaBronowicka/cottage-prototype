@@ -1,4 +1,4 @@
-# The Cottage: encounter prototype (v0.3: The Approach)
+# The Cottage: encounter prototype (v0.3.1: The Approach, layout v2)
 
 This is a browser prototype of the **cottage encounter**. It exists to test whether the card encounter is fun. It is **not** the real game, and the tech here is **not** the engine choice. That choice still needs Klaudia's sign-off.
 
@@ -28,14 +28,16 @@ Sources: rules *Cottage Paper Prototype Kit v0.1* plus the approved **rule set v
 - **Next event is face up** (`next_event_preview`, hover to zoom). Footprints on 4 of 8 events (Footsteps, The Gate Creaks, The Silence, The Door Handle); The Door Handle is now Dread +1.
 - **Night order:** event → footprint step(s) (+1 more on nights 5-6) → visit check (a Bar blocks it) → Dread-6 check.
 - **Treeline Search success** draws the Presence 1 closer; **Comfort success** turns it back 1.
-- **Visit** at the Door: Dread +1 and COMPANION 1 one zone outward, Presence back to the Treeline. A Bar stops it instead (Bar used, Presence to the Yard). A Bar is used by whichever comes first, a night event or a visit.
-- **Bread and Salt** (Calm, replaces Kompot): Dread −1 and the Presence back to the start. Flavour by direction (A "Leave bread and salt by the stove", B "Promise it bread in the morning").
+- **Visit** at the Door: Dread +1 and COMPANION 1 one zone outward, Presence back to the Treeline. A Bar stops it instead (Bar used, Presence to the Yard). A Bar is used by whichever comes first, a night event or a visit, **except** (v0.3.1, `presence.barSavesForVisit`, default ON): if tonight's footprint step(s), including the nights 5-6 extra step, take the Presence to the Door, an up Bar is **held for the visit** and the night event gets no Bar protection. The visit warning, the Bar tooltip and the next-event tooltip say so.
+- **Bread and Salt** (Calm, replaces Kompot): Dread −1 and the Presence back to the start. Card text (final): "Dread -1 and the Presence goes back to the Treeline." Flavour by direction (A "Leave bread and salt by the stove", B "Promise it bread in the morning").
 - Visit warning line, late-nights banner and sky cross-fade (nights 5-6), Presence lines in hover tips and the roll dialog, How to play section, debug line, stats columns.
+- **Tour:** 11 steps with the Presence on; step 4 (right after Dread) highlights the Approach strip and the next event (voice `tour.presence`). With the Presence off the step is skipped (10 steps). Step 9 (play a card) has a line per direction for Bread and Salt; the Kompot line stays when the Presence is off.
+- **How to play:** one-line tease per direction. Zosia's "WHAT IT IS" lines are writer notes (Questions spoiler): they live only in `docs/copy/` and a test checks they are never rendered.
 - **Copy:** Zosia's two directions (`data/ui-text.js → presence.dirs.A/B`), default A, `?presence=A|B`. The door line is picked by a seeded RNG separate from the dice. `[brackets]` = stage directions.
 - `presence.mode: 'off'` gives the v0.2 game exactly (Kompot, old Handle, no track). `'token'` (Variant 2) is parked and falls back to the track rules (logged as `token>track`).
 - All numbers are in `config.js → presence` (spaces, footprint events, steps, late nights, pull/push, visit effects, Bar return, offering card, door line count, late look).
 
-### Questions for Tomek (design gaps: simplest reading taken, each behind config)
+### Design gaps (Tomek confirmed 1-9 as built, 18 Oct 2026; 10 still open)
 1. Late extra step: unconditional on nights 5-6, or only on footprint nights? Now unconditional (`lateStepNeedsFootprint: false`).
 2. Does a Treeline Search from a card (Key on a String) pull the Presence? Now yes (`searchPullCountsCards: true`).
 3. Visit warning: shown whenever the forecast says the next night reaches the Door (also from the Yard with late + footprint).
@@ -95,22 +97,20 @@ The engine has no layout or art knowledge; zones, events and token anchors are d
 - `node tests/smoke.js` (v0.3): the 4,000 seeds also mix in presence off / token / direction B; targeted checks for footprints with a Bar, visit, Bar blocks a visit → Yard, Treeline pull, Comfort push, Bread and Salt, late step, forecast, off = v0.2, token fallback, direction doesn't change rules. Passed.
 - `node tests/text-test.js`: also checks Zosia's v0.3 copy (32 lines verbatim, A and B complete) and the 10 tour voice lines. Passed.
 - `node tools/sim-presence.js 5000`: win/visit/Bread and Salt stats vs presence off → `tests/sim-presence-report.txt`.
-- `ui-playwright.js` (v0.3): runs with presence default / off / B / token / late=swap, Approach + next event shown iff on, zoom on hover, Presence lines in tips and the roll dialog, visit warning + late banner + sky, a visit with the banner, How to play (B), presence off board; screenshots 24-28. Passed, 0 console errors.
+- `ui-playwright.js` (v0.3): runs with presence default / off / B / token / late=swap, Approach + next event shown iff on, zoom on hover, Presence lines in tips and the roll dialog, visit warning + late banner + sky, a visit with the banner, How to play (B), presence off board; screenshots 24-29 + 03b (Presence tour step). v0.3.1: tour step 4 + renumbering, Presence-off tour has 10 steps, step 9 lines A/B/off, How to play teases, WHAT IT IS never rendered, Bar-saved warning and tooltips. Passed, 0 console errors.
 - `node tests/dist-check.js`: the single file loads with no external files and 0 console errors (screenshot 22).
 
 ## Art import notes
 - The importer reads the cast (which `companions/<key>_*` files fill POV / COMPANION 1 / COMPANION 2) from `manifest.cast`. It skips anything in any `_retired/` folder or listed in `manifest.retired`, which covers the thread icon (retired 2026-10-18; Questions use the 3 Question icons). `tests/text-test.js` checks this.
 
-## Art check: mismatches against the rendered result (v0.3 art)
-Ola's 10 art-fit fixes are in, and `data/board-layout.js` now uses the manifest boxes, with only the overrides listed below. Checked with `tools/art-fit-audit.js` (`tests/art-fit-report.txt`), `?layout=1` and screenshots 09, 20, 24-28.
-- The HUD takes 420 stage px (280 px at 1280×720, 39% of the height) above the zones. All live text fits in every card box (full frame at 750/340, hand variant), the Question cards, the next-event card (HUD size and zoom), the Tonight box on nights 5-6 and the HUD boxes. Tokens stand inside their zones and clear of the zone strips in House, Yard and Treeline.
-- **No `event_card` box in v0.3:** tonight's event is drawn in `late_nights_banner` (override).
-- **`event_log` (y836-872) overlaps the zones** (they end at y860) by ~24 px.
-- **No box for the visit warning or the hint line:** explicit boxes in `board-layout.js` (`visitWarn`, `hint`).
-- **`hand` is 200 px tall → hand cards are 143 px wide.** Hand-variant effect text is ~10.6 px at 1920 and ~7 px at 1280 (names ~9 / ~6 px), not the ~14.5 px in the fix note (which assumes 190 px cards). Hover zoom is 15 px.
-- **`board/sky_late_overlay`:** most of the sky is behind the HUD, so the nights 5-6 cross-fade is subtle.
-- **PNG-only files** (converted to WebP in our copy): `fx/visit_frost_screen_f1-4` (~1.9 MB as PNG), `board/sky_late_overlay`.
-- The roll tray (our `tray` box) covers `questions_row` while rolling.
+## Art check: layout v2 against the rendered result
+Ola's layout v2 is imported (`node tools/import-art.js`, 120 files, 0 missing, all WebP from her). `data/board-layout.js` takes every box from the manifest (`board.ui_boxes` + `board.overlay_boxes`); the one override left is the transient night/visit banner, which has no manifest box. Checked with `tools/art-fit-audit.js` (`tests/art-fit-report.txt`) and screenshots.
+- HUD 356 stage px (237 px at 1280×720). No overflowing text in any box (cards full + hand variant, Questions, next event, late_nights_banner, visit_warning incl. the Bar-saved text, HUD boxes). Tokens sit inside their zones.
+- **questions_row** (70 px; 47 px at 1280): the Question text fits at both sizes (19 px at 1920, 12.7 px at 1280).
+- **Zone label strips** are 40 px at y722-762, so they stay clear of the Yard footprint ring (prints end at about y720). A taller strip (like the plate art's 80/320) would cover the ring's bottom row.
+- **roll_tray** (1000×400): the roll dialog fits only with tighter type (about 11-13 px at 1280). A taller tray would help.
+- Hand cards 190×266: effect 14.7 px at 1920 (9.8 at 1280), names 15.2 px; names over 18 characters (Chair Under the Handle) shrink to fit.
+- Not copied: `cards/_mock/*`, `board/_board*_debug.jpg` (reference), `icons/*_64` (we use the SVGs).
 - Still open from v2: chair art leans on the door; Q2 phone not clearly face-down.
 
 ## Open questions
@@ -188,6 +188,6 @@ Every finished run is saved to `localStorage` (key `cottageProto.runs.v1`). **St
 
 The rest of the observation sheet needs a human observer: hesitation, reading the Threads, cost vs story talk, reactions, the rules-question tally and the post-play questions.
 
-**v0.3 additions:** `presenceMode` (off/track, `token>track` when it falls back), `presenceDirection`, `presenceByNight`, `presenceVisits`, `presenceVisitsBlocked`, `offeringsPlayed` (Bread and Salt), `comfortPushes`, `searchPulls`, `presenceSteps`, `presenceClosest`; `perRound` entries end with `|P<position>`.
+**v0.3 additions:** `presenceMode` (off/track, `token>track` when it falls back), `presenceDirection`, `presenceByNight`, `presenceVisits`, `presenceVisitsBlocked`, `barHeldForVisit` (v0.3.1), `offeringsPlayed` (Bread and Salt), `comfortPushes`, `searchPulls`, `presenceSteps`, `presenceClosest`; `perRound` entries end with `|P<position>`.
 
 **v0.2 additions:** `rules` (active rule flags), `tutorial` (Y / N / `skipped@<step>`), `unusedActions`, `perRound` (one entry per night: `n<night>:<action counts>|p<plays>c<adds>h<helps>|D<dread>|C<clues>|<pov zone>/<C1 zone>`).

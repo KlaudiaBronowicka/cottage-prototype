@@ -5,6 +5,7 @@
  *   smart   — calms when Dread is high, brings COMPANION 1 home, plays clue cards, searches the Yard (Treeline when Dread <= 2); IGNORES the Presence
  *   aware   — smart, plus reads the face-up next event: when a visit is forecast it plays Bread and Salt or a Bar,
  *             else Comforts; avoids Treeline searches when the Presence is at the Window
+ * v0.3.1: rows with barSavesForVisit on (default) and off (= v0.3) for comparison.
  * "Win" = Outcome 1 (all three Questions, together). "Good" = Outcome 1 or 2x. "Broke" = Dread hit 6. */
 'use strict';
 var CONFIG = require('../config.js'), Engine = require('../game.js');
@@ -49,27 +50,30 @@ function run(cfg, bot, seed) {
   var legal = g.legalAllocations().sort(function (a, b) { return b.length - a.length; }); g.allocate(legal[0]);
   return g;
 }
-function cfgFor(mode) { return Object.assign({}, CONFIG, { presence: Object.assign({}, CONFIG.presence, { mode: mode }) }); }
+function cfgFor(mode, save) { return Object.assign({}, CONFIG, { presence: Object.assign({}, CONFIG.presence, { mode: mode, barSavesForVisit: save }) }); }
 var rows = [], out = [];
-['off', 'track'].forEach(function (mode) {
-  ['random', 'smart', 'aware'].forEach(function (bot) {
-    if (mode === 'off' && bot === 'aware') return; // same as smart without a Presence
-    var a = { n: 0, win: 0, good: 0, broke: 0, clues: 0, visits: 0, anyVisit: 0, blocked: 0, offer: 0, offerGames: 0, offerHeld: 0, pushes: 0, pulls: 0, door: 0 };
+// rows: [presence mode, bot, barSavesForVisit] (v0.3.1: flag ON is the default; OFF rows = v0.3 for comparison)
+var ROWS = [['off', 'smart', true], ['track', 'smart', true], ['track', 'aware', true], ['track', 'smart', false], ['track', 'aware', false],
+            ['off', 'random', true], ['track', 'random', true]];
+ROWS.forEach(function (row) {
+  var mode = row[0], bot = row[1], save = row[2];
+  (function () {
+    var a = { held: 0, n: 0, win: 0, good: 0, broke: 0, clues: 0, visits: 0, anyVisit: 0, blocked: 0, offer: 0, offerGames: 0, offerHeld: 0, pushes: 0, pulls: 0, door: 0 };
     for (var s = 1; s <= N; s++) {
-      var g = run(cfgFor(mode), bot, s), S = g.state, o = S.result.outcome, P = S.presence;
+      var g = run(cfgFor(mode, save), bot, s), S = g.state, o = S.result.outcome, P = S.presence;
       a.n++; if (o === '1') a.win++; if (o === '1' || /^2/.test(o)) a.good++; if (S.pressureMaxed) a.broke++;
       a.clues += S.progressEarned + g.cfg.startProgress;
       var bread = mode === 'off' ? 'kompot' : 'bread', seen = S.discard.indexOf(bread) >= 0 || S.hand.indexOf(bread) >= 0;
       if (seen) a.offerHeld++;
       if (S.stats.cardsPlayed.indexOf(bread) >= 0) a.offerGames++;
-      if (P) { a.visits += P.visits; if (P.visits) a.anyVisit++; a.blocked += P.blocked; a.offer += P.offerings; a.pushes += P.comfortPushes; a.pulls += P.searchPulls; }
+      if (P) { a.visits += P.visits; if (P.visits) a.anyVisit++; a.blocked += P.blocked; a.offer += P.offerings; a.pushes += P.comfortPushes; a.pulls += P.searchPulls; a.held += P.barHeldForVisit || 0; }
     }
     var pc = function (x) { return (100 * x / a.n).toFixed(1) + '%'; }, av = function (x) { return (x / a.n).toFixed(2); };
-    rows.push([mode, bot, pc(a.win), pc(a.good), pc(a.broke), av(a.clues), mode === 'off' ? '-' : av(a.visits), mode === 'off' ? '-' : pc(a.anyVisit), mode === 'off' ? '-' : av(a.blocked),
-      pc(a.offerGames) + ' (' + (a.offerHeld ? (100 * a.offerGames / a.offerHeld).toFixed(0) : 0) + '% of drawn)', mode === 'off' ? '-' : av(a.pushes), mode === 'off' ? '-' : av(a.pulls)]);
-  });
+    rows.push([mode, bot, mode === 'off' ? '-' : (save ? 'on' : 'off'), pc(a.win), pc(a.good), pc(a.broke), av(a.clues), mode === 'off' ? '-' : av(a.visits), mode === 'off' ? '-' : pc(a.anyVisit), mode === 'off' ? '-' : av(a.blocked),
+      pc(a.offerGames) + ' (' + (a.offerHeld ? (100 * a.offerGames / a.offerHeld).toFixed(0) : 0) + '% of drawn)', mode === 'off' ? '-' : av(a.pushes), mode === 'off' ? '-' : av(a.pulls), mode === 'off' ? '-' : av(a.held)]);
+  })();
 });
-var head = ['presence', 'bot', 'win (Outcome 1)', 'good (1/2x)', 'Dread hit 6', 'mean clues', 'visits/run', 'runs with a visit', 'visits blocked/run', 'Kompot/Bread and Salt played', 'Comfort pushes/run', 'Treeline pulls/run'];
+var head = ['presence', 'bot', 'barSavesForVisit', 'win (Outcome 1)', 'good (1/2x)', 'Dread hit 6', 'mean clues', 'visits/run', 'runs with a visit', 'visits blocked/run', 'Kompot/Bread and Salt played', 'Comfort pushes/run', 'Treeline pulls/run', 'Bar held for visit/run'];
 out.push('v0.3 The Approach sim · ' + N + ' runs per row · build ' + CONFIG.version + ' · ' + new Date().toISOString());
 out.push('(presence OFF row: the card in that slot is Kompot, Dread -1; presence track: Bread and Salt)');
 out.push(head.join(' | ')); rows.forEach(function (r) { out.push(r.join(' | ')); });

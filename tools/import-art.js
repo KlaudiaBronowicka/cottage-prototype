@@ -5,7 +5,7 @@
  * Reads <artDir>/manifest.json (+ cards/card_layout.json), copies the WEB versions
  * (.webp for bitmaps, .svg for icons/glyphs) into assets/art/, and rewrites
  * assets/manifest.js. Anything missing stays null → the UI draws a greybox placeholder.
- * Never copied: _src/, _mock*, _board_zones_debug, burnt_pierogi (dropped in v0.2), anything under any _retired/ folder or in manifest.retired (e.g. the thread icon).
+ * Never copied: _src/, _mock* (reference mock-ups), _board_zones_debug / _board_late_zones_debug (reference), icons/*_64 (raster fallbacks; we use the SVGs), burnt_pierogi (dropped in v0.2), anything under any _retired/ folder or in manifest.retired (e.g. the thread icon).
  * Cast (which companions/<key>_* files fill which slot) is read from manifest.cast, not hardcoded.
  * Kit card id → artist file name mapping is CARD_FILES below.
  * ===================================================================== */
@@ -25,6 +25,8 @@ var CARD_FILES = { photos: 'footprint_photos', object: 'the_object', story: 'the
   bread: 'bread_and_salt' /* v0.3 Offering card: expected from Ola, greybox until then */ };
 var CATS = ['clue', 'calm', 'protect', 'utility'];
 var copied = [], missing = [];
+// start clean so files the artist dropped or renamed (and our old WebP conversions) don't linger
+if (!dry && fs.existsSync(dstRoot)) fs.rmSync(dstRoot, { recursive: true, force: true });
 
 // copy the best web version of <rel without extension>; prefer svg when allowed, else webp, else png
 var RETIRED = [];
@@ -43,18 +45,7 @@ function take(relNoExt, preferSvg) {
   }
   missing.push(relNoExt); return null;
 }
-// PNG-only deliveries (large overlays/FX) are converted to WebP into OUR repo (Ola's files are never touched). Needs python3 + Pillow.
-function takeWebp(relNoExt) {
-  var from = path.join(src, relNoExt + '.png'), rel = relNoExt + '.webp', to = path.join(dstRoot, rel);
-  if (fs.existsSync(path.join(src, rel))) return take(relNoExt);
-  if (!fs.existsSync(from)) { missing.push(relNoExt); return null; }
-  if (!dry) {
-    fs.mkdirSync(path.dirname(to), { recursive: true });
-    var r = require('child_process').spawnSync('python3', ['-c', 'import sys;from PIL import Image;Image.open(sys.argv[1]).save(sys.argv[2],"WEBP",quality=80,method=6)', from, to]);
-    if (r.status !== 0) { console.warn('WebP conversion failed for ' + relNoExt + ': ' + r.stderr); return take(relNoExt); }
-  }
-  copied.push(rel + ' (converted from PNG)'); return 'assets/art/' + rel;
-}
+// (v0.3.1: every PNG now has the artist's own WebP twin, so our PNG→WebP conversion is gone; take() picks her .webp.)
 function boxes(o) { var r = {}; Object.keys(o || {}).forEach(function (k) { var b = o[k]; if (b && b.x != null) r[k] = { x: b.x, y: b.y, w: b.w, h: b.h }; }); return r; }
 function asset(p) { return (M.assets || []).filter(function (a) { return a.path === p; })[0] || {}; }
 
@@ -69,7 +60,7 @@ var out = {
   cardArt: {},
   board: {
     bg: take('board/board_bg'), bgSmall: take('board/board_bg_1280x720'), size: M.board.size,
-    zones: boxes(M.board.zones), ui: boxes(M.board.ui_boxes), hierarchy: M.board.hierarchy,
+    zones: boxes(M.board.zones), ui: Object.assign(boxes(M.board.ui_boxes), boxes(M.board.overlay_boxes)), overlayIds: Object.keys(M.board.overlay_boxes || {}), hierarchy: M.board.hierarchy,
     plates: {}, plateSlots: boxes(asset('board/zone_house.png').slots)
   },
   dread: { track: take('dread/pressure_track'), size: asset('dread/pressure_track.png').size || [1400, 200], steps: [], label: null, tiles: [] },
@@ -122,12 +113,12 @@ out.presence = {
   nextEventFrame: take('cards/next_event_frame'), nextEventSize: asset('cards/next_event_frame.png').size || [375, 525], nextEventLayout: boxes(M.next_event_layout),
   bar: take('fx/bar_on_door', true), barStopped: take('fx/bar_visit_stopped', true),
   handleFx: [1, 2, 3, 4].map(function (f) { return take('fx/visit_handle_f' + f, true); }),
-  frostWindowFx: [1, 2, 3, 4].map(function (f) { return takeWebp('fx/visit_frost_window_f' + f); }),
-  frostScreenFx: [1, 2, 3, 4].map(function (f) { return takeWebp('fx/visit_frost_screen_f' + f); }),
+  frostWindowFx: [1, 2, 3, 4].map(function (f) { return take('fx/visit_frost_window_f' + f); }),
+  frostScreenFx: [1, 2, 3, 4].map(function (f) { return take('fx/visit_frost_screen_f' + f); }),
   barStoppedIcon: take('icons/bar_stopped', true), eventCardBack: take('cards/event_card_back')
 };
 ['treeline', 'yard', 'window', 'door'].forEach(function (id, i) { out.presence.tiles[id] = take('approach/approach_step_' + (i + 1) + '_' + id); });
-out.board.bgLate = take('board/board_bg_late'); out.board.bgLateSmall = take('board/board_bg_late_1280x720'); out.board.skyLate = takeWebp('board/sky_late_overlay');
+out.board.bgLate = take('board/board_bg_late'); out.board.bgLateSmall = take('board/board_bg_late_1280x720'); out.board.skyLate = take('board/sky_late_overlay');
 var expectedV03 = missing.slice(before).concat(out.cardArt.bread ? [] : ['cards/art/bread_and_salt']);
 missing = missing.slice(0, before).filter(function (m) { return m !== 'cards/art/bread_and_salt'; });
 

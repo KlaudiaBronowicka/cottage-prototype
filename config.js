@@ -7,7 +7,7 @@
  * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
  * ===================================================================== */
 var CONFIG = {
-  version: 'kit-v0.1 + rules v0.2 + v0.3 The Approach / build 3',
+  version: 'kit-v0.1 + rules v0.2 + v0.3.1 The Approach / build 4',
 
   // ---------- Setup ----------
   startPressure: 0,          // pressure token starts here
@@ -149,6 +149,8 @@ var CONFIG = {
     visitC1Out: 1,              // ... and COMPANION 1 one zone outward ...
     visitReturnTo: 0,           // ... then the Presence goes back to the Treeline
     barBlockReturnTo: 1,        // a Bar stops the visit (Bar used); the Presence falls back to the Yard
+    barSavesForVisit: true,     // v0.3.1 (Tomek): if tonight's footprint step(s) take it to the Door, an up Bar is held for the visit
+                                //   and the night event is NOT stopped. false = the Bar stops whichever comes first (v0.3).
     eventOverrides: { handle: { pressure: 1 } }, // The Door Handle: Dread +2 -> +1 (tuned)
     offeringCard: { id: 'bread', replaces: 'kompot', name: 'Bread and Salt', icons: ['C'], effect: 'offering', value: -1, text: 'Dread -1 and the Presence goes back to the Treeline.' },
     tutorialHand: ['story', 'bread'],

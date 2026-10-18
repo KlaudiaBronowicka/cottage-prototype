@@ -256,6 +256,33 @@ assert.deepStrictEqual(a.state.log, b.state.log, 'seeded runs are deterministic'
   // forecast / visit warning: Window + footprint next
   S4.presence.pos = 2; S4.events = S4.events.filter(function (x) { return x !== 'silence'; }); S4.events.unshift('silence'); assert(g4.presenceForecast().visit, 'visit warning');
   S4.presence.pos = 1; assert(g4.presenceForecast().visit, 'Yard + footprint + late = visit');
+  // v0.3.1 barSavesForVisit (default ON): tonight's footprint step reaches the Door -> the up Bar is held for the visit, the event is not stopped
+  assert.strictEqual(CONFIG.presence.barSavesForVisit, true, 'barSavesForVisit defaults ON');
+  var gh = fresh(40), SH = gh.state; SH.presence.pos = 2; SH.bars = 1; SH.pressure = 0; SH.pov = 0; SH.c1 = 0;
+  SH.events = SH.events.filter(function (x) { return x !== 'footsteps'; }); SH.events.unshift('footsteps');
+  var fch = gh.presenceForecast(); assert(fch.visit && fch.barSaved, 'forecast: Bar saved for the visit');
+  nextNight(gh, 'footsteps');
+  assert(!SH.lastEvent.cancelled && SH.lastEvent.barSaved, 'event NOT stopped when the Bar is saved for the visit');
+  assert.strictEqual(SH.presence.barHeldForVisit, 1); assert.strictEqual(SH.presence.blocked, 1, 'held Bar blocks the visit');
+  assert.strictEqual(SH.presence.visits, 0); assert.strictEqual(SH.bars, 0); assert.strictEqual(SH.presence.pos, CONFIG.presence.barBlockReturnTo);
+  assert(SH.feed.some(function (f) { return f.type === 'barSaved'; }), 'barSaved feed entry');
+  for (var gi = 0; gi < 20 && SH.phase === 'actions'; gi++) { SH.actionsLeft = 0; SH.pressure = 0; SH.bars = 0; while (SH.hand.length >= gh.cfg.handLimit) SH.discard.push(SH.hand.pop()); gh.endRound(); }
+  if (SH.phase === 'allocate') gh.allocate([]);
+  var recH = Stats.buildRecord(gh, {}); assert(recH.barHeldForVisit >= 1, 'stats: barHeldForVisit logged');
+  // ... no visit coming: the Bar still stops the event (whichever comes first)
+  var gn = fresh(41), SN = gn.state; SN.presence.pos = 0; SN.bars = 1; SN.pov = 0; SN.c1 = 0; nextNight(gn, 'footsteps');
+  assert(SN.lastEvent.cancelled && SN.presence.barHeldForVisit === 0, 'no visit coming: Bar stops the event');
+  // ... the late step counts: night 5, Window, non-footprint event -> held
+  var gl = fresh(42), SL = gl.state; while (SL.round < 4) { SL.pressure = 0; SL.c1 = 0; SL.pov = 0; nextNight(gl, 'voice'); }
+  SL.presence.pos = 2; SL.bars = 1; SL.pressure = 0; SL.c1 = 0; SL.pov = 0; nextNight(gl, 'voice');
+  assert(!SL.lastEvent.cancelled && SL.presence.barHeldForVisit === 1 && SL.presence.blocked === 1, 'late step to the Door: Bar held');
+  // ... flag OFF = v0.3: the Bar stops the event, the visit lands
+  var P_NOSAVE = Object.assign({}, CONFIG, { presence: Object.assign({}, CONFIG.presence, { barSavesForVisit: false }) });
+  var gf = fresh(40, P_NOSAVE), SF = gf.state; SF.presence.pos = 2; SF.bars = 1; SF.pressure = 0; SF.pov = 0; SF.c1 = 0;
+  SF.events = SF.events.filter(function (x) { return x !== 'footsteps'; }); SF.events.unshift('footsteps');
+  assert(!gf.presenceForecast().barSaved, 'flag off: nothing saved');
+  nextNight(gf, 'footsteps');
+  assert(SF.lastEvent.cancelled && SF.presence.visits === 1 && SF.presence.blocked === 0 && SF.presence.barHeldForVisit === 0, 'flag off: Bar used by the event, visit lands');
   // off = v0.2 exactly
   var go = fresh(35, P_OFF); assert.strictEqual(go.state.presence, null); assert(go.cfg.deck.some(function (c) { return c.id === 'kompot'; }));
   assert.strictEqual(go.cfg.events.filter(function (e) { return e.id === 'handle'; })[0].pressure, 2); assert.strictEqual(go.presenceForecast(), null);

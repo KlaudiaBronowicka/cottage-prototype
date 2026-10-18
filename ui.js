@@ -124,7 +124,7 @@
       (panels ? '<img class="c-layer" src="' + panels + '" alt="" draggable="false">' : '<div class="c-layer gbpanels"></div>') +
       (frame ? '<img class="c-layer" src="' + frame + '" alt="" draggable="false">' : '') +
       (A.card.glyph[cat] ? '<img class="c-glyph" style="' + pb('category_glyph') + '" src="' + A.card.glyph[cat] + '" alt="" draggable="false">' : '<div class="c-glyph gb" style="' + pb('category_glyph') + '"></div>') +
-      '<div class="c-box c-name" data-box="name" style="' + pb('name') + '"><span>' + esc(cardName(id)) + '</span></div>' +
+      '<div class="c-box c-name' + (cardName(id).length > 18 ? ' long' : '') + '" data-box="name" style="' + pb('name') + '"><span>' + esc(cardName(id)) + '</span></div>' + // long names shrink to fit (artist: hand name shrinks to 560px)
       '<div class="c-box c-cat" data-box="category_label" style="' + pb('category_label') + '"><span>' + esc(P('cardCategories.' + cat)) + '</span></div>' +
       '<div class="c-box c-rlabel" data-box="roll_label" style="' + pb('roll_label') + '"><span>' + X('cardUi.addLabel') + '</span></div>' + rollIcons +
       '<div class="c-box c-effect" data-box="effect" style="' + pb('effect') + '"><span><b class="c-playlbl">' + X('cardUi.playLabel') + '</b> ' + X('cards.' + id + '.text') + '</span></div>' +
@@ -397,7 +397,7 @@
         (canMove ? '<div class="moveTag">' + X('board.moveHere') + ' ▸</div>' : '') +
         '<div class="zstrip" style="height:' + BL.zoneStripH + 'px"><span class="zname">' + esc(zoneName(z.id)) + '</span><span class="zbadge">' + statIcon('INSIGHT', { dark: true, notip: true }) + X('board.zoneBadge', { need: need, gain: z.progress }) + '</span></div></div>';
     }).join('');
-    var bar = S.bars ? '<div class="door" id="door" style="' + box(layoutBox('barOnDoor')) + '"' + tipA(P('board.barTip')) + '>' + (PA('bar') && ICON_STYLE !== 'mono' ? '<img src="' + PA('bar') + '" alt="' + esc(P('board.bar')) + '">' : icon('barOnDoor', { alt: P('board.bar') })) + '</div>' : '';
+    var bar = S.bars ? '<div class="door" id="door" style="' + box(layoutBox('barOnDoor')) + '"' + tipA(barSavedNow() ? P('presence.ui.barTipSaved') : P('board.barTip')) + '>' + (PA('bar') && ICON_STYLE !== 'mono' ? '<img src="' + PA('bar') + '" alt="' + esc(P('board.bar')) + '">' : icon('barOnDoor', { alt: P('board.bar') })) + '</div>' : '';
     // top band
     var pips = ''; for (var k = 0; k < c.actionsPerRound; k++) pips += '<span class="apip' + (k < S.actionsLeft ? ' on' : '') + '">' + icon('action', { dark: true, alt: '' }) + '</span>';
     var endLbl = P(c.rules && c.rules.endTurnButton ? 'actions.endTurn.label' : 'actions.endRound.label');
@@ -451,11 +451,14 @@
       return '<div class="hud help' + (used ? ' used' : '') + '" id="help-' + w + '" style="' + box(layoutBox(w === 'c1' ? 'helpC1' : 'helpC2')) + '"' + tipA(tip) + '>' + (A.helps[w] ? '<img src="' + A.helps[w] + '" alt="" draggable="false">' : '<div class="gbhelp">' + esc(Skin.speaker(w.toUpperCase(), names())) + '</div>') +
         '<div class="hslot" data-box="help.text" style="' + pctBox(A.helpSlots.text, 320, 400) + '"><span><b>+' + bonus + '</b> ' + X(used ? 'hud.helpUsed' : 'hud.helpReady') + '</span></div></div>';
     }).join('');
-    var ev = S.lastEvent, evb = layoutBox('eventCard');
+    var ev = S.lastEvent, evb = layoutBox('eventCard'), lateInCard = BL.boxes.lateBanner === BL.boxes.eventCard;
+    function lateLine(cls) { return '<div class="' + cls + '" id="lateBanner"' + tipA(P('presence.ui.lateBanner')) + '>' + img(A.moons[Math.min(S.round, A.moons.length) - 1], 'ic', '') + '<span>' + X('presence.ui.lateBanner') + '</span></div>'; }
     var evFp = PON() && evDef(ev.id).footprint, late = isLate();
     var evHTML = '<div class="hud evcard' + (ev.cancelled ? ' cancelled' : '') + (late ? ' late' : '') + '" id="nightEvent" style="' + box(evb) + '"' + tipA(P('hud.eventTip', { event: eventName(ev.id), effect: ev.cancelled ? P('hud.eventCancelled') : P('eventEffects.' + ev.id) }) + ' ' + fmt(TXT.events[ev.id] || '') + (evFp ? ' ' + P('presence.ui.footprintTip') : '')) + '>' +
       '<div class="evn">' + esc(eventName(ev.id)) + '</div><div class="eve">' + (ev.cancelled ? X('hud.eventCancelled') : X('eventEffects.' + ev.id)) + '</div>' + (ev.cancelled ? icon('barOnDoor', { cls: 'evbar', alt: '' }) : '') + (evFp ? footprintMark('evfp') : '') +
-      '<div class="evtonight">' + X('hud.tonight') + '</div>' + (late ? '<div class="evlate" id="lateBanner"' + tipA(P('presence.ui.lateBanner')) + '>' + img(A.moons[Math.min(S.round, A.moons.length) - 1], 'ic', '') + '<span>' + X('presence.ui.lateBanner') + '</span></div>' : '') + '</div>';
+      '<div class="evtonight">' + X('hud.tonight') + '</div>' + (late && lateInCard ? lateLine('evlate') : '') + '</div>';
+    // nights 5-6: the thin late_nights_banner strip (layout v2); falls back to a line inside the event card if both share a box
+    if (late && !lateInCard) evHTML += '<div class="hud lateBanner" style="' + box(layoutBox('lateBanner')) + '">' + lateLine('lbin') + '</div>';
     var feedAll = S.feed.map(feedText);
     var logHTML = '<div class="hud evlog" id="eventLog" style="' + box(layoutBox('eventLog')) + '"' + tipA(P('hud.logTitle') + ': ' + (feedAll.slice(-8).reverse().join(' · ') || '—')) + '><span>' + esc(feedAll[feedAll.length - 1] || '') + '</span></div>';
     // night 2 hint (Clarity Pass 4.4)
@@ -500,7 +503,7 @@
     }).join('');
     return '<div class="hud approach' + (warn ? ' warn' : '') + '" id="approach" style="' + box(ab) + '"' + tipA(P('presence.ui.trackTip')) + '>' +
       (PA('track') ? '<img class="aptrack" src="' + PA('track') + '" alt="" draggable="false">' : '<div class="aptrack gbtrack"></div>') + cells + '</div>' +
-      (warn ? '<div class="hud visitWarn" id="visitWarn" style="' + box(layoutBox('visitWarn')) + '">' + X('presence.ui.visitWarning') + '</div>' : '');
+      (warn ? '<div class="hud visitWarn' + (fc.barSaved ? ' barSaved' : '') + '" id="visitWarn" style="' + box(layoutBox('visitWarn')) + '">' + X(fc.barSaved ? 'presence.ui.visitWarningBarSaved' : 'presence.ui.visitWarning') + '</div>' : '');
   }
   /** the face-up next event, drawn at the artist's 375x525 frame size; o.w = display width */
   function nextEventCard(id, o) {
@@ -519,9 +522,10 @@
   function nextEventHTML() {
     if (!PON()) return '';
     var G = U.game, id = G.nextEventId(), b = layoutBox('nextEvent'), fp = id && evDef(id).footprint;
-    var tip = id ? P('presence.ui.nextTip', { event: eventName(id) }) + ' ' + P('eventEffects.' + id) + (fp ? ' ' + P('presence.ui.footprintTip') : '') : P('presence.ui.nextNone');
+    var tip = id ? P('presence.ui.nextTip', { event: eventName(id) }) + ' ' + P('eventEffects.' + id) + (fp ? ' ' + P('presence.ui.footprintTip') : '') + (barSavedNow() ? ' ' + P('presence.ui.nextBarSaved') : '') : P('presence.ui.nextNone');
     return '<div class="hud nextev' + (fp ? ' fp' : '') + '" id="nextEvent" data-next="' + (id || '') + '" style="' + box(b) + '"' + tipA(tip) + '>' + nextEventCard(id, { w: b.w }) + '</div>';
   }
+  function barSavedNow() { var fc = PON() && U.game ? U.game.presenceForecast() : null; return !!(fc && fc.barSaved); }
   function isLate() { var G = U.game; return PON() && G.state.round >= G.cfg.presence.lateFromNight; }
   function lineHTML(raw) { var lp = lineParts(raw); return lp.who ? '<b>' + esc(Skin.speaker(lp.who, names())) + ':</b> ' + H(lp.text) : H(lp.narr); }
   // centre banners (night start, visit) queue so they never overlap
@@ -564,7 +568,7 @@
   }
 
   function feedText(f) {
-    if (f.type === 'presence' || f.type === 'visit' || f.type === 'visitBlocked') return presenceFeedText(f);
+    if (f.type === 'presence' || f.type === 'visit' || f.type === 'visitBlocked' || f.type === 'barSaved') return presenceFeedText(f);
     if (f.type === 'barUsed' && f.src && f.src.type === 'visit') return P('presence.ui.feedBlocked');
     var cs = feedCause(f.src || {});
     if (f.type === 'pressure') return P('feed.dread', { sign: f.delta > 0 ? '+' : '−', n: Math.abs(f.delta), cause: cs });
@@ -582,6 +586,7 @@
     }
     if (f.type === 'visit') return P('presence.ui.feedVisit');
     if (f.type === 'visitBlocked') return '';
+    if (f.type === 'barSaved') return P('presence.ui.feedBarSaved');
     return '';
   }
   function presenceCause(s) {
@@ -770,7 +775,7 @@
       (r.star ? X('roll.omen') : r.strong ? X(T.kind === 'steady' ? 'roll.strongComfort' : 'roll.strong') : r.success ? X('roll.success') : X('roll.fail')) + '</div><div class="rr2">' +
       X('roll.resultLine', { face: r.roll, total: r.star ? '—' : r.total, need: r.difficulty }) + '</div>' +
       '<button class="primary" id="rollDone">' + X('roll.continue') + ' ▸</button></div>' : '';
-    return '<div class="tray" id="tray" style="' + box(layoutBox('tray')) + '"><div class="trayHead"><div class="tt">' + esc(trayTitle()) + '</div>' +
+    return '<div class="tray' + (r ? ' hasResult' : '') + '" id="tray" style="' + box(layoutBox('tray')) + '"><div class="trayHead"><div class="tt">' + esc(trayTitle()) + '</div>' +
       '<div class="tu">' + statIcon(T.stat, { notip: true }) + X('roll.uses', { stat: statName(T.stat) }) + '</div>' +
       '<div class="tneed"' + tipA(P('roll.needTip')) + '>' + X('roll.need', { need: need }) + '</div></div>' + zonePick +
       '<div class="trayBody"><div class="tcol"><div class="th">' + X('roll.addTitle') + '</div><div class="addlist" id="rollAdd">' + addRows + '</div>' +
@@ -933,7 +938,7 @@
     openPanel('<h2>' + H(HT.title) + '</h2><div class="howto">' + HT.body.map(function (p) { return '<p>' + H(p, { max: cfg.pressureMax }) + '</p>'; }).join('') + '</div>' +
       '<div class="plates">' + plates + '</div>' +
       (PON() ? '<h3>' + X('presence.ui.howTitle') + '</h3><div class="howto presence" id="howPresence">' + UT.presence.ui.howRules.map(function (p) { return '<p>' + H(p) + '</p>'; }).join('') +
-        '<p class="what">' + PT.what.map(function (p) { return H(p); }).join(' ') + '</p></div>' : '') +
+        '<p class="tease">' + H(PT.howTease) + '</p></div>' : '') +
       '<h3>' + H(HT.glossaryTitle) + '</h3><table class="gloss">' + HT.glossary.map(function (g) { return '<tr><th>' + H(g[0]) + '</th><td>' + H(g[1], { max: cfg.pressureMax }) + '</td></tr>'; }).join('') + '</table>');
   }
   function openStats() {
@@ -961,7 +966,13 @@
   }
 
   // ---------- guided Night 1 (coach marks) ----------
-  var STEPS = JSON.parse(JSON.stringify(UT.onboarding.steps).replace(/@tutorialCard/g, (ECFG.tutorialHand || [])[1] || 'kompot'));
+  var STEPS = JSON.parse(JSON.stringify(UT.onboarding.steps.filter(function (st) { return !st.needsPresence || PON(); })).replace(/@tutorialCard/g, (ECFG.tutorialHand || [])[1] || 'kompot'));
+  // tour play step: Kompot keeps its line; Bread and Salt gets the line for the Presence direction (neutral with no direction)
+  STEPS.forEach(function (st) {
+    if (st.voiceBread && ((ECFG.tutorialHand || [])[1] === 'bread')) st.voice = PON() ? (st.voiceBread[PDIR] || st.voiceBread.neutral) : st.voiceBread.neutral;
+    delete st.voiceBread;
+    if (st.voice === '@tour.presence') st.voice = UT.tour.presence;
+  });
   function tutStep() { return U.tut ? STEPS[U.tut.i] : null; }
   function tutAllows(ctl) { var s = tutStep(); return !s || (s.allow || []).indexOf(ctl) >= 0; }
   function tutAdvance() {
@@ -1079,7 +1090,7 @@
     if (e.key === 'Escape') { if (!overlay.classList.contains('hidden')) closeOverlay(); else if (U.pinned) closeZoom(); else if (U.tray && !U.tray.result && !U.tut) { U.tray = null; renderEncounter(); } }
     if ((e.key === ' ' || e.key === 'Enter') && (U.screen === 'vn' || U.screen === 'outro') && document.getElementById('bNext') && overlay.classList.contains('hidden')) { e.preventDefault(); vnNext(); }
   });
-  window.__ui = { U: U, fmt: fmt, P: P, cardHTML: cardHTML, questionCardHTML: questionCardHTML, nextEventCard: nextEventCard, renderEncounter: function () { renderEncounter(); } }; // for tests / audits
+  window.__ui = { STEPS: STEPS, U: U, fmt: fmt, P: P, cardHTML: cardHTML, questionCardHTML: questionCardHTML, nextEventCard: nextEventCard, renderEncounter: function () { renderEncounter(); } }; // for tests / audits
 
   fit();
   renderTitle();

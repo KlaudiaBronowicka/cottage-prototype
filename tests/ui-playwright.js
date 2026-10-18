@@ -32,20 +32,27 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   await shot('01-title');
   await page.click('#bSkip'); await page.click('#bGo'); await page.waitForTimeout(2800);
   await shot('03-tutorial-step1-goal');
-  for (var i = 0; i < 4; i++) await page.click('#coachNext');
+  for (var i = 0; i < 3; i++) await page.click('#coachNext');
+  // step 4 (v0.3.1): the Presence, highlighting the Approach strip and the next event
+  var cb = await page.textContent('#coachBubble');
+  assert(/Step 4 of 11/.test(cb) && /moves along this track/.test(cb) && /It's at the trees now\. Every hour it comes a little closer\./.test(cb), 'tour step 4 = the Presence: ' + cb.slice(0, 120));
+  assert((await page.$$('.coachRing')).length === 2, 'Presence step highlights the Approach strip and the next event');
+  await shot('03b-tutorial-step4-presence');
+  await page.click('#coachNext'); await page.click('#coachNext'); // step 5 zones -> step 6 Search
   await page.click('#act-steady', { force: true }); // locked during the tutorial
   assert(!(await page.$('#tray')), 'tutorial blocks non-highlighted controls');
   await page.click('#act-investigate'); await page.waitForTimeout(400);
-  await shot('04-tutorial-step6-roll-dialog');
+  await shot('04-tutorial-step7-roll-dialog');
   var add = await page.$('[data-commit]'); if (add) await add.click();
   await page.click('#rollGo'); await page.waitForTimeout(700);
   assert(/Success/.test(await page.textContent('#rollResult')), 'tutorial first Search succeeds');
-  await shot('05-tutorial-step7-clue');
+  await shot('05-tutorial-step8-clue');
   await page.click('#coachNext');
   var tutCard = await page.evaluate(function () { return window.__game.cfg.tutorialHand[1]; }); // Bread and Salt with the Presence on
   assert(tutCard === 'bread', 'tutorial play step uses Bread and Salt (presence on)');
+  assert(/Bread and salt, by the stove\. The .+ says that's how you say please here\./.test(await page.textContent('#coachBubble')) && !/Drink\./.test(await page.textContent('#coachBubble')), 'tour step 9 (play) bubble shows the A line');
   await page.click('#card-' + tutCard); await page.waitForTimeout(300);
-  await shot('06-tutorial-step8-play-card');
+  await shot('06-tutorial-step9-play-card');
   await page.click('#zoomPlay'); await page.waitForTimeout(500);
   await page.click('#coachNext');
   await page.click('#act-end'); await page.waitForTimeout(2900);
@@ -162,7 +169,7 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   assert(nRuns >= 12, 'runs saved: ' + nRuns);
   await page.click('#bStats2'); await page.click('#sCopyC'); await page.waitForTimeout(200);
   var csv = await page.inputValue('#sOut'), header = csv.split('\n')[0];
-  ['progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice', 'outcome', 'outcomeScene', 'roundsPlayed', 'playsVsCommits', 'rules', 'tutorial', 'perRound', 'unusedActions', 'presenceMode', 'presenceDirection', 'presenceByNight', 'presenceVisits', 'presenceVisitsBlocked', 'offeringsPlayed', 'comfortPushes', 'searchPulls'].forEach(function (f) { assert(header.split(',').indexOf(f) >= 0, 'CSV has ' + f); });
+  ['progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice', 'outcome', 'outcomeScene', 'roundsPlayed', 'playsVsCommits', 'rules', 'tutorial', 'perRound', 'unusedActions', 'presenceMode', 'presenceDirection', 'presenceByNight', 'presenceVisits', 'presenceVisitsBlocked', 'barHeldForVisit', 'offeringsPlayed', 'comfortPushes', 'searchPulls'].forEach(function (f) { assert(header.split(',').indexOf(f) >= 0, 'CSV has ' + f); });
   await shot('15-stats');
   await page.click('#ovClose');
   // how to play + menu
@@ -201,6 +208,11 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   await page.waitForTimeout(2800);
   assert(await page.$('#visitWarn') && await page.$('#lateBanner') && await page.$('#skyLate.on'), 'visit warning, late banner, late sky');
   await shot('25-visit-warning-late-nights', { wait: 0 });
+  // v0.3.1 barSavesForVisit: a Bar up + visit coming -> warning and tooltips say the Bar is saved for the visit
+  await page.evaluate(function () { var g = window.__game, S = g.state; S.bars = 1; S.presence.pos = 2; var i = S.events.indexOf('footsteps'); if (i >= 0) S.events.splice(i, 1); S.events.unshift('footsteps'); window.__ui.renderEncounter(); });
+  assert(/saved for the visit/.test(await page.textContent('#visitWarn')), 'visit warning: Bar saved for the visit');
+  assert(/saved for the visit/.test(await page.getAttribute('#door', 'data-tip')) && /saved for the visit/.test(await page.getAttribute('#nextEvent', 'data-tip')), 'Bar + next-event tooltips: saved for the visit');
+  await shot('29-bar-saved-for-visit', { wait: 0 });
   // a visit: Window + successful Treeline Search
   await page.evaluate(function () { var g = window.__game, S = g.state; S.pov = 2; S.bars = 0; S.torch = 9; S.actionsLeft = 2; S.c1 = 0; g.investigate({ roll: 1 }); window.__ui.renderEncounter(); });
   await page.waitForSelector('.nightBanner.visit', { timeout: 6000 });
@@ -209,8 +221,38 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   await page.goto(url + '?seed=5&tutorial=0&presence=B'); await page.click('#bSkip'); await page.click('#bGo'); await page.waitForTimeout(2700);
   await page.click('#btnMenu'); await page.click('#mHow'); await page.waitForTimeout(200);
   assert(/zmora/.test(await page.textContent('#howPresence')), 'How to play explains the Presence (B)');
+  // v0.3.1: one-line tease, and the WHAT IT IS writer notes (Questions spoiler) are never rendered
+  var md = fs.readFileSync(path.join(__dirname, '..', 'docs/copy/v03-approach-copy-zosia.md'), 'utf8');
+  var WHATS = md.split('\n').filter(function (l) { return /^WHAT IT IS:/.test(l); }).map(function (l) { return l.replace(/^WHAT IT IS:\s*/, ''); })
+    .reduce(function (a, l) { return a.concat(l.split(' / ')); }, []).map(function (l) { return l.replace(/COMPANION 1/g, ''); });
+  assert(WHATS.length === 4, 'found the 4 WHAT IT IS sentences in the copy doc');
+  async function noWhatItIs(where) {
+    var txt = await page.evaluate(function () { return document.body.innerText + ' ' + Array.prototype.map.call(document.querySelectorAll('[data-tip]'), function (e) { return e.getAttribute('data-tip'); }).join(' '); });
+    WHATS.forEach(function (w) { var frag = w.slice(-50); assert(txt.indexOf(frag) < 0, 'WHAT IT IS not rendered (' + where + '): ' + frag); });
+  }
+  assert(/Something walks barefoot around the cottage at night, looking for a way in\./.test(await page.textContent('#howPresence')), 'How to play tease (B)');
+  var breadB = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }); return { eff: h.querySelector('.c-effect').textContent, flav: h.querySelector('.c-flav').textContent }; });
+  assert(/Dread -1 and the Presence goes back to the Treeline\.$/.test(breadB.eff.trim()) && breadB.flav.trim() === 'Promise it bread in the morning', 'Bread and Salt final text (B): ' + JSON.stringify(breadB));
+  await noWhatItIs('How to play B');
   await shot('27-how-to-play-presence-B');
   await page.click('#ovClose');
+  await page.goto(url + '?seed=5&tutorial=0&presence=A'); await page.click('#bSkip'); await page.click('#bGo'); await page.waitForTimeout(2700);
+  await page.click('#btnMenu'); await page.click('#mHow'); await page.waitForTimeout(200);
+  assert(/Something small walks the edge of the house at night\./.test(await page.textContent('#howPresence')), 'How to play tease (A)');
+  await noWhatItIs('How to play A'); await page.click('#ovClose');
+  // Bread and Salt shows exactly the final text (effect; flavour by direction) in the hand and in the full card
+  var breadA = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }); return { eff: h.querySelector('.c-effect').textContent, flav: h.querySelector('.c-flav').textContent }; });
+  assert(/(^|\s)Dread -1 and the Presence goes back to the Treeline\.$/.test(breadA.eff.trim()) && breadA.flav.trim() === 'Leave bread and salt by the stove', 'Bread and Salt final text (A): ' + JSON.stringify(breadA));
+  // tour step 8 line: A / B with Bread and Salt; Presence off deals Kompot and keeps the Kompot line
+  var tourPlay = {};
+  for (var tp of ['A', 'B', 'off']) {
+    await page.goto(url + '?presence=' + tp); await page.waitForTimeout(150);
+    tourPlay[tp] = await page.evaluate(function () { var st = window.__ui.STEPS.filter(function (x) { return x.id === 'play'; })[0]; return { card: st.allow[0], voice: st.voice, n: window.__ui.STEPS.length, hasP: window.__ui.STEPS.some(function (x) { return x.id === 'presence'; }) }; });
+  }
+  assert(tourPlay.A.card === 'card-bread' && tourPlay.A.voice === "{C2}: Bread and salt, by the stove. The {HOST} says that's how you say please here.", 'tour step 8 line A');
+  assert(tourPlay.B.card === 'card-bread' && tourPlay.B.voice === '{POV}: [whispering] Bread and salt in the morning. I promise. [beat] I mean it.', 'tour step 8 line B');
+  assert(tourPlay.off.card === 'card-kompot' && /^\{C2\}: Drink\./.test(tourPlay.off.voice), 'tour step 8 with Presence off keeps the Kompot line');
+  assert(tourPlay.off.n === 10 && !tourPlay.off.hasP && tourPlay.A.n === 11 && tourPlay.A.hasP, 'Presence tour step only when the Presence is on (11 vs 10 steps)');
   await page.goto(url + '?seed=5&tutorial=0&presence=off'); await page.click('#bSkip'); await page.click('#bGo'); await page.waitForTimeout(2700);
   assert(!(await page.$('#approach')) && (await page.$('#card-kompot') || true), 'presence off = v0.2 board');
   await shot('28-presence-off-v02');

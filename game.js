@@ -97,7 +97,7 @@
 
     var PR = cfg.presence || {}, PON = cfg.presenceMode !== 'off', DOOR = PON ? PR.spaces.length - 1 : 0;
     var copyRng = makeRng((seed ^ 0x5eed1e55) >>> 0); // separate seeded stream for picking copy lines (does not change dice/deck)
-    if (PON) S.presence = { mode: cfg.presenceMode, asked: cfg.presenceModeAsked, pos: PR.start || 0, visits: 0, blocked: 0, offerings: 0, comfortPushes: 0, searchPulls: 0, steps: 0, closest: PR.start || 0, byNight: [], lastVisit: null };
+    if (PON) S.presence = { mode: cfg.presenceMode, asked: cfg.presenceModeAsked, pos: PR.start || 0, visits: 0, blocked: 0, offerings: 0, comfortPushes: 0, searchPulls: 0, barHeldForVisit: 0, steps: 0, closest: PR.start || 0, byNight: [], lastVisit: null };
     function log(msg, kind) { S.log.push({ round: S.round, kind: kind || 'info', text: msg }); }
     function card(id) { for (var i = 0; i < cfg.deck.length; i++) if (cfg.deck[i].id === id) return cfg.deck[i]; return null; }
     function zoneName(i) { return cfg.zones[i].name; }
@@ -232,7 +232,15 @@
       var ev = null; for (var i = 0; i < cfg.events.length; i++) if (cfg.events[i].id === evId) ev = cfg.events[i];
       S.eventsSeen.push(evId);
       S.lastEvent = { id: evId, cancelled: false };
-      resolveEvent(ev);
+      // v0.3.1 (Tomek): barSavesForVisit. If tonight's footprint step(s) (incl. the late step) take the Presence to the Door,
+      // an up Bar is HELD for that visit and the night event gets no Bar protection. Otherwise the Bar stops whichever comes first.
+      var hold = PON && PR.barSavesForVisit && S.bars > 0 && S.presence.pos + presenceNightSteps(ev, S.round).total >= DOOR;
+      if (hold) {
+        S.presence.barHeldForVisit++; S.lastEvent.barSaved = true;
+        S.feed.push({ round: S.round, type: 'barSaved', src: { type: 'event', id: evId } });
+        log('The Bar is saved for the visit: ' + ev.name + ' is not stopped.', 'event');
+      }
+      resolveEvent(ev, hold);
       // v0.3 night order: 1 event (a Bar cancels it) > 2 footprint step(s) > 3 visit at the Door (a Bar blocks it) > 4 Dread 6 check
       // (Dread 6 ends the night at once wherever it happens; steps after that would change nothing.)
       if (PON && !ended()) {
@@ -241,9 +249,9 @@
         if (st.total) presenceStep(st.total, { type: st.footprint ? 'footprint' : 'late', id: ev.id, late: st.late });
       }
     }
-    function resolveEvent(ev) {
+    function resolveEvent(ev, barHeld) {
       var evId = ev.id;
-      if (S.bars > 0) {
+      if (S.bars > 0 && !barHeld) {
         S.bars--; S.lastEvent.cancelled = true; S.feed.push({ round: S.round, type: 'barUsed', src: { type: 'event', id: evId } });
         log('NIGHT: ' + ev.name + ' — cancelled by a Bar (Bars left: ' + S.bars + ').', 'good');
         return;
@@ -379,7 +387,9 @@
         if (!PON || S.round >= cfg.rounds) return null;
         var nid = S.events[0], nev = null; for (var i = 0; i < cfg.events.length; i++) if (cfg.events[i].id === nid) nev = cfg.events[i];
         var st = presenceNightSteps(nev, S.round + 1);
-        return { nextEvent: nid, steps: st, reach: Math.min(DOOR, S.presence.pos + st.total), visit: S.presence.pos + st.total >= DOOR, late: S.round + 1 >= PR.lateFromNight };
+        var visit = S.presence.pos + st.total >= DOOR;
+        return { nextEvent: nid, steps: st, reach: Math.min(DOOR, S.presence.pos + st.total), visit: visit, late: S.round + 1 >= PR.lateFromNight,
+                 barSaved: !!(visit && PR.barSavesForVisit && S.bars > 0) }; // v0.3.1: the up Bar will be held for the visit
       },
       nextEventId: function () { return S.round < cfg.rounds ? S.events[0] || null : null; },
 

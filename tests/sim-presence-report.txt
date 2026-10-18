@@ -1,8 +1,10 @@
-v0.3 The Approach sim · 5000 runs per row · build kit-v0.1 + rules v0.2 + v0.3 The Approach / build 3 · 2026-10-18T05:23:27.702Z
+v0.3 The Approach sim · 5000 runs per row · build kit-v0.1 + rules v0.2 + v0.3.1 The Approach / build 4 · 2026-10-18T05:44:48.403Z
 (presence OFF row: the card in that slot is Kompot, Dread -1; presence track: Bread and Salt)
-presence | bot | win (Outcome 1) | good (1/2x) | Dread hit 6 | mean clues | visits/run | runs with a visit | visits blocked/run | Kompot/Bread and Salt played | Comfort pushes/run | Treeline pulls/run
-off | random | 0.0% | 8.3% | 41.0% | 2.56 | - | - | - | 36.9% (43% of drawn) | - | -
-off | smart | 9.9% | 69.5% | 7.5% | 5.75 | - | - | - | 47.7% (56% of drawn) | - | -
-track | random | 0.0% | 6.0% | 54.7% | 2.52 | 0.79 | 76.9% | 0.00 | 35.7% (42% of drawn) | 0.67 | 0.04
-track | smart | 5.2% | 58.8% | 12.8% | 5.24 | 1.07 | 92.6% | 0.00 | 38.4% (46% of drawn) | 0.79 | 0.34
-track | aware | 6.6% | 65.0% | 7.9% | 5.44 | 0.65 | 62.4% | 0.00 | 49.6% (58% of drawn) | 1.39 | 0.29
+presence | bot | barSavesForVisit | win (Outcome 1) | good (1/2x) | Dread hit 6 | mean clues | visits/run | runs with a visit | visits blocked/run | Kompot/Bread and Salt played | Comfort pushes/run | Treeline pulls/run | Bar held for visit/run
+off | smart | - | 9.9% | 69.5% | 7.5% | 5.75 | - | - | - | 47.7% (56% of drawn) | - | - | -
+track | smart | on | 5.5% | 59.1% | 12.5% | 5.26 | 0.85 | 76.7% | 0.26 | 40.2% (48% of drawn) | 0.86 | 0.34 | 0.26
+track | aware | on | 7.9% | 66.1% | 8.2% | 5.54 | 0.21 | 20.6% | 0.46 | 49.8% (59% of drawn) | 1.59 | 0.30 | 0.47
+track | smart | off | 5.2% | 58.8% | 12.8% | 5.24 | 1.07 | 92.6% | 0.00 | 38.4% (46% of drawn) | 0.79 | 0.34 | 0.00
+track | aware | off | 6.6% | 65.0% | 7.9% | 5.44 | 0.65 | 62.4% | 0.00 | 49.6% (58% of drawn) | 1.39 | 0.29 | 0.00
+off | random | - | 0.0% | 8.3% | 41.0% | 2.56 | - | - | - | 36.9% (43% of drawn) | - | - | -
+track | random | on | 0.0% | 6.1% | 54.0% | 2.51 | 0.66 | 64.2% | 0.14 | 36.0% (43% of drawn) | 0.69 | 0.04 | 0.16

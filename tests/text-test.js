@@ -31,10 +31,20 @@ var beat4 = JSON.stringify(TXT.intro);
 ['Right. Three questions, and then nobody opens that door. One: what is circling the house?', '[gently, looking right at her] Two: what is {C1} hiding?',
  '[turning her phone face down] Pass.', "Three: why are we here, in this exact cottage? [The {POV}'s hand goes to {OBJECT}.]",
  "We don't need every answer tonight. We just need to make it to dawn."].forEach(function (l) { assert(beat4.indexOf(JSON.stringify(l).slice(1, -1)) >= 0, 'Beat 4 line: ' + l); });
-var voices = UT.onboarding.steps.map(function (s) { return s.voice; }).filter(Boolean);
+var voices = UT.onboarding.steps.map(function (s) { return s.voice === '@tour.presence' ? UT.tour.presence : s.voice; }).filter(Boolean);
 ['{C2}: Six hours till light. We can do six hours.', '{POV}: Something keeps circling this house. I want to know what.', "{C1}: It's back. Under the window.",
  '{POV}: The footprints stop at the door. Right at the door.', "{C2}: Drink. The {HOST} said don't waste it, and I'm scared of her."].forEach(function (v) { assert(voices.indexOf(v) >= 0, 'coach voice: ' + v); });
-assert.strictEqual(UT.onboarding.steps.length, 10, '10 coach steps (spec 9.3)');
+assert.strictEqual(UT.onboarding.steps.length, 11, '11 coach steps (spec 9.3 + the Presence step, v0.3.1)');
+assert.strictEqual(UT.onboarding.steps.filter(function (s) { return !s.needsPresence; }).length, 10, '10 coach steps with the Presence off');
+var ids = UT.onboarding.steps.map(function (s) { return s.id; });
+assert.strictEqual(ids.indexOf('presence'), ids.indexOf('event') + 1, 'Presence step right after the Dread step');
+assert.deepStrictEqual(UT.onboarding.steps[ids.indexOf('presence')].target, ['approach', 'nextEvent'], 'Presence step highlights the Approach strip + next event');
+assert(voices.indexOf("{C2}: It's at the trees now. Every hour it comes a little closer. We don't fight it. We turn it away.") >= 0, 'Presence step voice (tour.presence)');
+// voices stay on their topics
+var vOf = function (id) { return UT.onboarding.steps[ids.indexOf(id)].voice; };
+assert.strictEqual(vOf('zones'), "{C2}: The answers are out by the trees. So is whatever's walking."); assert.strictEqual(vOf('search'), "{POV}: Start here, where it's warm. Kitchen first.");
+assert.strictEqual(vOf('add'), "{C2}: Use what we found today. That's what it's for."); assert.strictEqual(vOf('comfort'), '{POV}: If she goes outside, I talk her home. Gently.');
+assert.strictEqual(vOf('end'), '{C2}: One hour down. Five to go.');
 assert.strictEqual(UT.cards.chair.flavour, 'Wedge it tight. If it holds till morning, it was a good chair.');
 assert.deepStrictEqual(UT.questions, { T1: 'What is circling the house?', T2: 'What is {C1} hiding?', T3: 'Why are we here?' });
 assert.strictEqual(CONFIG.recapTagLines, false, 'recap tag lines default OFF');
@@ -62,14 +72,35 @@ console.log('ALL TEXT CHECKS PASSED');
   var unslot = function (s) { return s.replace(/\{C1\}/g, 'COMPANION 1').replace(/\{C2\}/g, 'COMPANION 2').replace(/\{POV\}/g, 'POV').replace(/\{HOST\}/g, 'HOST'); };
   var n = 0;
   ['A', 'B'].forEach(function (d) {
-    var X = D[d], all = X.what.concat(X.door, [X.c1, X.turnAway.comfort, X.turnAway.offering, X.turnAway.bar, X.late, X.search, X.offeringAction]).concat(Object.keys(X.tease).map(function (k) { return X.tease[k]; }));
+    var X = D[d], all = X.door.concat( [X.c1, X.turnAway.comfort, X.turnAway.offering, X.turnAway.bar, X.late, X.search, X.offeringAction]).concat(Object.keys(X.tease).map(function (k) { return X.tease[k]; }));
     all.forEach(function (line) {
       var l = unslot(line).replace(/^(COMPANION [12]|POV): /, '');
       if (md.indexOf(l) < 0) throw new Error('not verbatim in Zosia copy (' + d + '): ' + l);
       n++;
     });
   });
+  // v0.3.1: tour step 8 lines (Bread and Salt by direction / neutral), How to play teases, tour.presence, verbatim
+  var play = UT2.onboarding.steps.filter(function (s) { return s.id === 'play'; })[0];
+  [[play.voiceBread.A, "{C2}: Bread and salt, by the stove. The {HOST} says that's how you say please here."],
+   [play.voiceBread.B, '{POV}: [whispering] Bread and salt in the morning. I promise. [beat] I mean it.'],
+   [play.voiceBread.neutral, '{C2}: Bread and salt. Old manners, but they still work.'],
+   [play.voice, "{C2}: Drink. The {HOST} said don't waste it, and I'm scared of her."],
+   [D.A.howTease, 'Something small walks the edge of the house at night.'],
+   [D.B.howTease, 'Something walks barefoot around the cottage at night, looking for a way in.'],
+   [UT2.tour.presence, "{C2}: It's at the trees now. Every hour it comes a little closer. We don't fight it. We turn it away."]
+  ].forEach(function (p) { if (p[0] !== p[1]) throw new Error('v0.3.1 copy not verbatim: ' + p[0]); });
+  // Bread and Salt FINAL text (Klaudia, v0.3.1): shown exactly
+  if (UT2.cards.bread.text !== 'Dread -1 and the Presence goes back to the Treeline.') throw new Error('Bread and Salt effect text is not the final text');
+  if (D.A.offeringAction !== 'Leave bread and salt by the stove' || D.B.offeringAction !== 'Promise it bread in the morning') throw new Error('Bread and Salt flavour A/B not final');
+  // 'WHAT IT IS' writer notes (Questions spoiler) must not be in any player-facing source
+  var whats = md.split('\n').filter(function (l) { return /^WHAT IT IS:/.test(l); }).map(function (l) { return l.replace(/^WHAT IT IS:\s*/, ''); })
+    .reduce(function (a, l) { return a.concat(l.split(' / ')); }, []).map(function (l) { return unslot(l); });
+  if (whats.length !== 4) throw new Error('expected 4 WHAT IT IS sentences in the copy doc, found ' + whats.length);
+  var shipped = ['data/ui-text.js', 'data/vn-text.js', 'ui.js', 'index.html', 'config.js'].map(function (f) { return unslot(fs.readFileSync(__dirname + '/../' + f, 'utf8')).replace(/\\'/g, "'"); }).join('\n');
+  whats.forEach(function (w) { [w, w.slice(0, 60), w.slice(-60)].forEach(function (frag) { if (shipped.indexOf(frag) >= 0) throw new Error('WHAT IT IS text is in a player-facing file: ' + frag); }); });
+  if (/what:\s*\[/.test(fs.readFileSync(__dirname + '/../data/ui-text.js', 'utf8'))) throw new Error('presence.dirs.*.what still exists');
+  console.log('WHAT IT IS CHECK PASSED (4 writer-note sentences found nowhere in the shipped text)');
   var steps = UT2.onboarding.steps.filter(function (s) { return s.voice; }).length;
-  if (steps !== 10) throw new Error('all 10 tour steps should have Zosia voice lines, found ' + steps);
-  console.log('PRESENCE COPY CHECK PASSED (' + n + ' lines verbatim, A and B complete; 10/10 tour voice lines)');
+  if (steps !== 11) throw new Error('all 11 tour steps should have Zosia voice lines, found ' + steps);
+  console.log('PRESENCE COPY CHECK PASSED (' + n + ' lines verbatim, A and B complete; 11/11 tour voice lines)');
 })();

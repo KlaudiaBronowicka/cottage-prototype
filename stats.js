@@ -22,7 +22,7 @@
     // v0.2: rule set, tutorial, unused actions, per-night detail
     'rules', 'tutorial', 'unusedActions', 'perRound',
     // v0.3 The Approach: Presence logging (Tension Pass §9.11)
-    'presenceMode', 'presenceDirection', 'presenceByNight', 'presenceVisits', 'presenceVisitsBlocked', 'offeringsPlayed', 'comfortPushes', 'searchPulls', 'presenceSteps', 'presenceClosest'];
+    'presenceMode', 'presenceDirection', 'presenceByNight', 'presenceVisits', 'presenceVisitsBlocked', 'barHeldForVisit', 'offeringsPlayed', 'comfortPushes', 'searchPulls', 'presenceSteps', 'presenceClosest'];
 
   function buildRecord(game, meta) {
     var S = game.state, R = S.result, cfg = game.cfg, Pr = S.presence;
@@ -56,7 +56,7 @@
       presenceMode: Pr ? (Pr.asked !== Pr.mode ? Pr.asked + '>' + Pr.mode : Pr.mode) : 'off',
       presenceDirection: Pr ? (meta.presenceDirection || (cfg.presence && cfg.presence.direction) || '') : '',
       presenceByNight: Pr ? Pr.byNight.join(' ') : '', presenceVisits: Pr ? Pr.visits : '', presenceVisitsBlocked: Pr ? Pr.blocked : '',
-      offeringsPlayed: Pr ? Pr.offerings : '', comfortPushes: Pr ? Pr.comfortPushes : '', searchPulls: Pr ? Pr.searchPulls : '',
+      barHeldForVisit: Pr ? Pr.barHeldForVisit : '', offeringsPlayed: Pr ? Pr.offerings : '', comfortPushes: Pr ? Pr.comfortPushes : '', searchPulls: Pr ? Pr.searchPulls : '',
       presenceSteps: Pr ? Pr.steps : '', presenceClosest: Pr ? Pr.closest : ''
     };
   }

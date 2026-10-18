@@ -5,7 +5,7 @@
  * Layout overrides/corrections live in data/board-layout.js.
  * ===================================================================== */
 var ASSET_MANIFEST = {
- "generatedBy": "tools/import-art.js from /workspace/cottage-art (2026-10-18 v0.3 The Approach + art-fit fixes)",
+ "generatedBy": "tools/import-art.js from /workspace/cottage-art (2026-10-18 v0.3 The Approach + layout v2)",
  "style": "Wilcza Noc · Kolor (locked)",
  "palette": {
   "ink": "#111111",
@@ -189,145 +189,178 @@ var ASSET_MANIFEST = {
   "zones": {
    "house": {
     "x": 30,
-    "y": 420,
+    "y": 356,
     "w": 650,
-    "h": 440
+    "h": 412
    },
    "yard": {
     "x": 680,
-    "y": 420,
+    "y": 356,
     "w": 740,
-    "h": 440
+    "h": 412
    },
    "treeline": {
     "x": 1420,
-    "y": 420,
+    "y": 356,
     "w": 470,
-    "h": 440
+    "h": 412
    }
   },
   "ui": {
    "actions_left_end_turn": {
     "x": 30,
-    "y": 16,
+    "y": 10,
     "w": 400,
-    "h": 80
+    "h": 64
    },
    "goal_banner": {
-    "x": 460,
-    "y": 16,
-    "w": 1000,
-    "h": 80
+    "x": 450,
+    "y": 10,
+    "w": 1020,
+    "h": 64
    },
    "night_counter": {
     "x": 1490,
-    "y": 16,
+    "y": 10,
     "w": 400,
-    "h": 80
+    "h": 64
    },
    "dread_track": {
     "x": 30,
-    "y": 108,
-    "w": 900,
-    "h": 180
+    "y": 82,
+    "w": 709,
+    "h": 152
    },
    "approach_track": {
-    "x": 950,
-    "y": 108,
-    "w": 643,
-    "h": 180
+    "x": 755,
+    "y": 82,
+    "w": 507,
+    "h": 152
    },
-   "late_nights_banner": {
-    "x": 1610,
-    "y": 108,
-    "w": 280,
-    "h": 180
+   "event_card": {
+    "x": 1280,
+    "y": 82,
+    "w": 610,
+    "h": 152
    },
    "questions_row": {
     "x": 30,
-    "y": 300,
+    "y": 242,
     "w": 1500,
-    "h": 110
+    "h": 70
    },
    "clue_counter": {
     "x": 1550,
-    "y": 300,
+    "y": 242,
     "w": 340,
-    "h": 110
+    "h": 70
+   },
+   "late_nights_banner": {
+    "x": 30,
+    "y": 318,
+    "w": 560,
+    "h": 32
+   },
+   "visit_warning": {
+    "x": 600,
+    "y": 318,
+    "w": 1290,
+    "h": 32
+   },
+   "hint_line": {
+    "x": 30,
+    "y": 772,
+    "w": 1300,
+    "h": 32
+   },
+   "event_log": {
+    "x": 1350,
+    "y": 772,
+    "w": 540,
+    "h": 32
    },
    "deck": {
-    "x": 24,
-    "y": 884,
+    "x": 20,
+    "y": 851,
     "w": 120,
     "h": 180
    },
    "action_buttons": {
-    "x": 154,
-    "y": 884,
-    "w": 260,
-    "h": 184
+    "x": 150,
+    "y": 808,
+    "w": 240,
+    "h": 262
    },
    "hand": {
-    "x": 424,
-    "y": 876,
-    "w": 1016,
-    "h": 200
+    "x": 400,
+    "y": 808,
+    "w": 986,
+    "h": 266
    },
    "help_companion_1": {
-    "x": 1450,
-    "y": 876,
+    "x": 1396,
+    "y": 841,
     "w": 160,
     "h": 200
    },
    "help_companion_2": {
-    "x": 1616,
-    "y": 876,
+    "x": 1562,
+    "y": 841,
     "w": 160,
     "h": 200
    },
    "next_event_preview": {
-    "x": 1786,
-    "y": 876,
-    "w": 124,
-    "h": 174
+    "x": 1730,
+    "y": 820,
+    "w": 172,
+    "h": 241
    },
-   "event_log": {
-    "x": 1450,
-    "y": 836,
-    "w": 460,
-    "h": 36
+   "roll_tray": {
+    "x": 460,
+    "y": 362,
+    "w": 1000,
+    "h": 400
    },
    "bar_on_door": {
     "x": 232,
-    "y": 494,
+    "y": 416,
     "w": 110,
     "h": 48
    },
    "door": {
     "x": 248,
-    "y": 435,
+    "y": 357,
     "w": 80,
     "h": 165
    },
    "door_handle": {
     "x": 286,
-    "y": 500,
+    "y": 422,
     "w": 40,
     "h": 40
    },
    "window": {
-    "x": 300,
-    "y": 212,
-    "w": 76,
-    "h": 100
+    "x": 392,
+    "y": 367,
+    "w": 44,
+    "h": 86
    }
   },
+  "overlayIds": [
+   "roll_tray",
+   "bar_on_door",
+   "door",
+   "door_handle",
+   "window"
+  ],
   "hierarchy": [
-   "goal_banner+night_counter",
-   "dread_track+approach_track (threat row, side by side)",
-   "questions_row+clue_counter",
-   "zones",
-   "hand (+deck, action_buttons, helps, next_event_preview)"
+   "row1 y10-74: goal_banner + night_counter (+ actions_left_end_turn)",
+   "row2 y82-234: dread_track + approach_track side by side, event_card (tonight)",
+   "row3 y242-312: questions_row + clue_counter",
+   "alerts y318-350: late_nights_banner (nights 5-6) + visit_warning",
+   "zones y356-768",
+   "hint_line + event_log y772-804",
+   "hand row y808-1074: deck, action_buttons, hand, help portraits, next_event_preview"
   ],
   "plates": {
    "house": "assets/art/board/zone_house.webp",
@@ -362,7 +395,7 @@ var ASSET_MANIFEST = {
   "track": "assets/art/dread/pressure_track.webp",
   "size": [
    1400,
-   280
+   300
   ],
   "steps": [
    {
@@ -419,7 +452,7 @@ var ASSET_MANIFEST = {
    "x": 38,
    "y": 192,
    "w": 1324,
-   "h": 68
+   "h": 88
   },
   "tiles": [
    "assets/art/dread/pressure_step_0.webp",
@@ -558,7 +591,7 @@ var ASSET_MANIFEST = {
   "track": "assets/art/approach/approach_track.webp",
   "trackSize": [
    1000,
-   280
+   300
   ],
   "steps": [
    {
@@ -570,9 +603,9 @@ var ASSET_MANIFEST = {
     "h": 156,
     "name": {
      "x": 33,
-     "y": 190,
+     "y": 192,
      "w": 196,
-     "h": 66
+     "h": 88
     }
    },
    {
@@ -584,9 +617,9 @@ var ASSET_MANIFEST = {
     "h": 156,
     "name": {
      "x": 279,
-     "y": 190,
+     "y": 192,
      "w": 196,
-     "h": 66
+     "h": 88
     }
    },
    {
@@ -598,9 +631,9 @@ var ASSET_MANIFEST = {
     "h": 156,
     "name": {
      "x": 525,
-     "y": 190,
+     "y": 192,
      "w": 196,
-     "h": 66
+     "h": 88
     }
    },
    {
@@ -612,9 +645,9 @@ var ASSET_MANIFEST = {
     "h": 156,
     "name": {
      "x": 771,
-     "y": 190,
+     "y": 192,
      "w": 196,
-     "h": 66
+     "h": 88
     }
    }
   ],

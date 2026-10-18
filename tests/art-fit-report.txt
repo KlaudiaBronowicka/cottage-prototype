@@ -1,26 +1,30 @@
 == viewport 1280x720 (stage scale 0.667) ==
 Overflowing boxes: none
-Card effect text on screen: hand (143px, hand variant) 7.1px, zoom 15.0px (artist note: min 14px)
-Card name on screen in hand: 5.9px
-HUD above the zones: 280 screen px (38.9% of the stage height)
+Card effect text on screen: hand (190px, hand variant) 9.8px, zoom 15.0px (artist note: min 14px)
+Card name on screen in hand: 10.1px
+HUD above the zones: 237 screen px (33.0% of the stage height)
 Tokens: all inside their zone box and clear of the zone strip
-Nights 5-6 Tonight box (late_nights_banner): fits; sky overlay on
-Next-event title on screen at the HUD size: 8.7px (hover zoom 300px wide)
+late_nights_banner (nights 5-6): fits; visit_warning: fits, Bar-saved text: fits; sky overlay on
+(a) questions_row: 47 screen px tall; Question text 12.7px fits (47 of 70 stage px) / 12.7px fits (47 of 70 stage px) / 12.7px fits (47 of 70 stage px)
+(b) zone label strips (stage y): house 722-762, yard 722-762, treeline 722-762; footprint ring ends ~y720 -> no strip clips the ring
+Next-event title on screen at the HUD size: 12.0px (hover zoom 300px wide)
 == viewport 1920x1080 (stage scale 1.000) ==
 Overflowing boxes: none
-Card effect text on screen: hand (143px, hand variant) 10.6px, zoom 15.0px (artist note: min 14px)
-Card name on screen in hand: 8.9px
-HUD above the zones: 420 screen px (38.9% of the stage height)
+Card effect text on screen: hand (190px, hand variant) 14.7px, zoom 15.0px (artist note: min 14px)
+Card name on screen in hand: 15.2px
+HUD above the zones: 356 screen px (33.0% of the stage height)
 Tokens: all inside their zone box and clear of the zone strip
-Nights 5-6 Tonight box (late_nights_banner): fits; sky overlay on
-Next-event title on screen at the HUD size: 13.0px (hover zoom 300px wide)
+late_nights_banner (nights 5-6): fits; visit_warning: fits, Bar-saved text: fits; sky overlay on
+(a) questions_row: 70 screen px tall; Question text 19.0px fits (47 of 70 stage px) / 19.0px fits (47 of 70 stage px) / 19.0px fits (47 of 70 stage px)
+(b) zone label strips (stage y): house 722-762, yard 722-762, treeline 722-762; footprint ring ends ~y720 -> no strip clips the ring
+Next-event title on screen at the HUD size: 18.1px (hover zoom 300px wide)
 
-== checked by eye in the rendered game (screenshots 09, 20, 24-28) - notes for Ola, by manifest box name ==
-  - board.ui_boxes: no "event_card" box in v0.3. Tonight's event is drawn in "late_nights_banner" (board-layout override eventCard -> late_nights_banner). Wanted: a home for tonight's event, or confirm late_nights_banner is it.
-  - "event_log" (y836-872) overlaps the zone boxes (zones end at y860) by ~24px; the last log line sits on the zone strip edge.
-  - No boxes for the visit warning or the coach/hint line: explicit boxes in board-layout.js (visitWarn 560,428,800,46; hint 560,482,800,48). Please add "visit_warning" + "hint_line" boxes.
-  - "hand" box is 200px tall, so hand cards are 143px wide (hand variant). Effect text measures (see above) ~10.6px at 1920 and ~7px at 1280, not the ~14.5px in the fix note (that figure assumes 190px-wide cards). Card names ~9px / ~6px. Either a taller hand box (~266px) or bigger hand-variant text boxes.
-  - board/sky_late_overlay: with the HUD at ~39% of the height most of the sky sits behind HUD panels, so the nights 5-6 cross-fade is subtle. Maybe more change lower on the board (fence/treeline).
-  - PNG-only (we convert to WebP in our repo, her files untouched): fx/visit_frost_screen_f1-4 (~1.9MB total as PNG), board/sky_late_overlay.
-  - Roll tray (our explicit "tray" box) covers "questions_row" while rolling; fine for now, flag if she wants the questions visible during rolls.
-  - All v0.3 keys present: approach track + 4 step tiles + name boxes, presence tokens A/B 128/256, footprint icons, next_event frame + layout, late_nights_banner, sky_late_overlay, board_bg_late, bar_on_door, bar_visit_stopped, door_handle / visit_frost_window / visit_frost_screen fx (4 frames each), bread_and_salt card art, card_frame_hand + card_panels_hand. Importer: 120 files, 0 missing.
+== layout v2 (Ola, 2026-10-18), checked in the rendered game (screenshots 09, 10, 20, 24-29) - notes for Ola, by box name ==
+  - All board-layout overrides the manifest covers are gone: event_card, late_nights_banner, visit_warning, hint_line, roll_tray (overlay), door / door_handle / bar_on_door / window (overlay) now come straight from the manifest. One override left: the night-start / visit "banner" (no manifest box; transient overlay at 460,410 1000x220 in the zone band).
+  - roll_tray (1000x400): the roll dialog fits only with tighter type (title 28px, rows 16px, die faces 20px at 1920 = ~11-13px at 1280). Workable; a taller tray (~460) would let it breathe.
+  - Zone label strips: we set them 40px tall, 6px from the zone bottom (y722-762) so they stay clear of the footprint ring (prints end at ~y720). The plate art strip (zone_*.png slots, 80/320 of the plate) would be ~103px at the 412px zone height and would cover the ring's bottom row.
+  - Hand cards are 190x266 (hand variant): effect text 14.7px at 1920 / 9.8px at 1280, names 15.2 / 10.1px, as in her note.
+  - sky_late_overlay now covers the zone band: straight linear 0 -> 1 fade over 2.4s.
+  - Every file is her WebP now (our PNG->WebP conversions removed). Not copied (not for shipping / not used): cards/_mock/*, board/_board*_debug.jpg, icons/*_64 (we use the SVGs).
+  - Hand-variant name box (560px): "Chair Under the Handle" does not fit at 60px; names over 18 characters shrink to 42px (5.6cqw), as her note allows.
+  - Importer: 120 files, 0 missing.

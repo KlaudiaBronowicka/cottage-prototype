@@ -62,6 +62,13 @@ var root = path.resolve(__dirname, '..'), url = 'file://' + path.join(root, 'ind
       // layout: HUD height above the zones, tokens inside their zone and clear of the zone strip
       var st = document.getElementById('stage').getBoundingClientRect(), zt = document.getElementById('zone-house').getBoundingClientRect().top - st.top;
       var geo = { hudPx: zt, hudPct: zt / st.height * 100, tokens: [] };
+      // (a) questions_row: height and Question text fit
+      var qr = document.getElementById('questions'), sc0 = st.width / 1920;
+      geo.q = { h: qr.getBoundingClientRect().height, chips: Array.prototype.map.call(document.querySelectorAll('#stage .qchip'), function (c) {
+        var t = c.querySelector('.qtxt'), cr = c.getBoundingClientRect(), tr = t.getBoundingClientRect();
+        return { font: parseFloat(getComputedStyle(t).fontSize) * sc0, fits: tr.top >= cr.top - 0.5 && tr.bottom <= cr.bottom + 0.5 && t.scrollWidth <= t.clientWidth + 1, need: Math.round(tr.height / sc0), have: Math.round(cr.height / sc0) }; }) };
+      // (b) zone label strips vs the Yard footprint ring (ring ends at about y720 on board_bg v2)
+      geo.strips = Array.prototype.map.call(document.querySelectorAll('#stage .zone'), function (z) { var r = z.querySelector('.zstrip').getBoundingClientRect(); return { id: z.id, top: Math.round((r.top - st.top) / sc0), bottom: Math.round((r.bottom - st.top) / sc0) }; });
       return { rep: rep, scale: scale, geo: geo };
     }, res.ids);
     // token placement in every zone (POV + COMPANION 1), stage px
@@ -81,11 +88,14 @@ var root = path.resolve(__dirname, '..'), url = 'file://' + path.join(root, 'ind
       g.state.pov = 0; g.state.c1 = 0;
       return out;
     });
-    // late night (5-6) render: Tonight box with the late line
+    // late night (5-6) render: the late_nights_banner strip, and the visit_warning strip (both texts, incl. the Bar-saved one)
     var late = await p.evaluate(function () {
-      var g = window.__game; g.state.round = 5; window.__ui.renderEncounter();
-      var e = document.getElementById('nightEvent'), o = e.scrollHeight > e.clientHeight + 1;
-      return { over: o, need: e.scrollHeight, have: e.clientHeight, sky: !!document.getElementById('skyLate') };
+      var g = window.__game, S = g.state; S.round = 5; S.presence.pos = 2; S.bars = 0; window.__ui.renderEncounter();
+      function fit(id) { var e = document.getElementById(id); if (!e) return null; var b = e.closest('.hud') || e; return { over: b.scrollWidth > b.clientWidth + 1 || b.scrollHeight > b.clientHeight + 1, need: b.scrollWidth, have: b.clientWidth }; }
+      var lb = fit('lateBanner'), vw = fit('visitWarn');
+      S.bars = 1; var i = S.events.indexOf('footsteps'); if (i >= 0) S.events.splice(i, 1); S.events.unshift('footsteps'); window.__ui.renderEncounter();
+      var vs = fit('visitWarn'); S.bars = 0; S.presence.pos = 0; S.round = 1; window.__ui.renderEncounter();
+      return { lb: lb, vw: vw, vs: vs, sky: !!document.getElementById('skyLate') };
     });
     var handScale = cards.scale;
     out.push('== viewport ' + vp.join('x') + ' (stage scale ' + handScale.toFixed(3) + ') ==');
@@ -99,22 +109,25 @@ var root = path.resolve(__dirname, '..'), url = 'file://' + path.join(root, 'ind
     out.push('Card name on screen in hand: ' + (nm.font * handScale).toFixed(1) + 'px');
     out.push('HUD above the zones: ' + Math.round(cards.geo.hudPx) + ' screen px (' + cards.geo.hudPct.toFixed(1) + '% of the stage height)');
     out.push('Tokens: ' + (toks.length ? toks.join('; ') : 'all inside their zone box and clear of the zone strip'));
-    out.push('Nights 5-6 Tonight box (late_nights_banner): ' + (late.over ? 'OVERFLOW, needs ' + late.need + 'px, has ' + late.have + 'px' : 'fits') + '; sky overlay ' + (late.sky ? 'on' : 'off'));
+    var fitS = function (f) { return !f ? 'NOT SHOWN' : f.over ? 'OVERFLOW (needs ' + f.need + 'px, has ' + f.have + 'px)' : 'fits'; };
+    out.push('late_nights_banner (nights 5-6): ' + fitS(late.lb) + '; visit_warning: ' + fitS(late.vw) + ', Bar-saved text: ' + fitS(late.vs) + '; sky overlay ' + (late.sky ? 'on' : 'off'));
+    out.push('(a) questions_row: ' + Math.round(cards.geo.q.h) + ' screen px tall; Question text ' + cards.geo.q.chips.map(function (c) { return c.font.toFixed(1) + 'px ' + (c.fits ? 'fits' : 'DOES NOT FIT') + ' (' + c.need + ' of ' + c.have + ' stage px)'; }).join(' / '));
+    out.push('(b) zone label strips (stage y): ' + cards.geo.strips.map(function (z) { return z.id.replace('zone-', '') + ' ' + z.top + '-' + z.bottom; }).join(', ') + '; footprint ring ends ~y720 -> ' + (cards.geo.strips.every(function (z) { return z.top >= 721; }) ? 'no strip clips the ring' : 'A STRIP CLIPS THE RING'));
     var ne = cards.rep.filter(function (r) { return /^next event/.test(r.id) && r.w < 200 && r.box === 'next_event.title'; })[0];
     if (ne) out.push('Next-event title on screen at the HUD size: ' + (ne.font * handScale).toFixed(1) + 'px (hover zoom ' + BOARD_W_ZOOM + 'px wide)');
     cards.rep.filter(function (r) { return r.screen && r.font < 11; }).forEach(function (r) { out.push('  SMALL TEXT ' + r.id + ': ' + r.font.toFixed(1) + 'px on screen'); });
     await p.close();
   }
-  out.push('', '== checked by eye in the rendered game (screenshots 09, 20, 24-28) - notes for Ola, by manifest box name ==');
+  out.push('', '== layout v2 (Ola, 2026-10-18), checked in the rendered game (screenshots 09, 10, 20, 24-29) - notes for Ola, by box name ==');
   [
-    'board.ui_boxes: no "event_card" box in v0.3. Tonight\'s event is drawn in "late_nights_banner" (board-layout override eventCard -> late_nights_banner). Wanted: a home for tonight\'s event, or confirm late_nights_banner is it.',
-    '"event_log" (y836-872) overlaps the zone boxes (zones end at y860) by ~24px; the last log line sits on the zone strip edge.',
-    'No boxes for the visit warning or the coach/hint line: explicit boxes in board-layout.js (visitWarn 560,428,800,46; hint 560,482,800,48). Please add "visit_warning" + "hint_line" boxes.',
-    '"hand" box is 200px tall, so hand cards are 143px wide (hand variant). Effect text measures ' + '(see above) ~10.6px at 1920 and ~7px at 1280, not the ~14.5px in the fix note (that figure assumes 190px-wide cards). Card names ~9px / ~6px. Either a taller hand box (~266px) or bigger hand-variant text boxes.',
-    'board/sky_late_overlay: with the HUD at ~39% of the height most of the sky sits behind HUD panels, so the nights 5-6 cross-fade is subtle. Maybe more change lower on the board (fence/treeline).',
-    'PNG-only (we convert to WebP in our repo, her files untouched): fx/visit_frost_screen_f1-4 (~1.9MB total as PNG), board/sky_late_overlay.',
-    'Roll tray (our explicit "tray" box) covers "questions_row" while rolling; fine for now, flag if she wants the questions visible during rolls.',
-    'All v0.3 keys present: approach track + 4 step tiles + name boxes, presence tokens A/B 128/256, footprint icons, next_event frame + layout, late_nights_banner, sky_late_overlay, board_bg_late, bar_on_door, bar_visit_stopped, door_handle / visit_frost_window / visit_frost_screen fx (4 frames each), bread_and_salt card art, card_frame_hand + card_panels_hand. Importer: 120 files, 0 missing.'
+    'All board-layout overrides the manifest covers are gone: event_card, late_nights_banner, visit_warning, hint_line, roll_tray (overlay), door / door_handle / bar_on_door / window (overlay) now come straight from the manifest. One override left: the night-start / visit "banner" (no manifest box; transient overlay at 460,410 1000x220 in the zone band).',
+    'roll_tray (1000x400): the roll dialog fits only with tighter type (title 28px, rows 16px, die faces 20px at 1920 = ~11-13px at 1280). Workable; a taller tray (~460) would let it breathe.',
+    'Zone label strips: we set them 40px tall, 6px from the zone bottom (y722-762) so they stay clear of the footprint ring (prints end at ~y720). The plate art strip (zone_*.png slots, 80/320 of the plate) would be ~103px at the 412px zone height and would cover the ring\'s bottom row.',
+    'Hand cards are 190x266 (hand variant): effect text 14.7px at 1920 / 9.8px at 1280, names 15.2 / 10.1px, as in her note.',
+    'sky_late_overlay now covers the zone band: straight linear 0 -> 1 fade over 2.4s.',
+    'Every file is her WebP now (our PNG->WebP conversions removed). Not copied (not for shipping / not used): cards/_mock/*, board/_board*_debug.jpg, icons/*_64 (we use the SVGs).',
+    'Hand-variant name box (560px): "Chair Under the Handle" does not fit at 60px; names over 18 characters shrink to 42px (5.6cqw), as her note allows.',
+    'Importer: 120 files, 0 missing.'
   ].forEach(function (l) { out.push('  - ' + l); });
   fs.writeFileSync(path.join(root, 'tests', 'art-fit-report.txt'), out.join('\n') + '\n');
   console.log(out.join('\n'));
