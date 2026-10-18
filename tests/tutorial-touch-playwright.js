@@ -72,7 +72,7 @@ var DEVICES = [
     // D) Roll with nothing added while a magnifier is in hand: blocked, generic message, still step 8
     await tap('#rollGo'); assert(!(await page.$('#rollResult')), dev.name + ': Roll blocked with no card added');
     var toast = await page.evaluate(function () { var t = document.querySelector('.toast.warn'); return t ? t.textContent : ''; });
-    assert(toast === 'Add a magnifier card to the roll first, then roll.', dev.name + ': gate message: ' + toast);
+    assert(toast === "You're holding a card that helps. Add it to the roll first, then roll.", dev.name + ': gate message: ' + toast);
     await expectStep(8, 'blocked roll keeps step 8');
     await tap('[data-commit="rummage"]'); assert(/Your total: 3\. Need: 3\. Chance: about 100%/.test(await total()), dev.name + ': step 8 guided odds: ' + await total());
     await tap('#rollGo'); await page.waitForTimeout(300); await tap('#rollDone'); await expectStep(9, 'search2 done');

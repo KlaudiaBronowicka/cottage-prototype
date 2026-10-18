@@ -121,7 +121,7 @@ t('v0.4.2 guided rolls: generic magnifier gate + real (safe-face) odds', functio
   assert.strictEqual(byId.search.await, 'roll:icon', 'step 4 accepts any magnifier card (coach text says "a card with a magnifier")');
   assert.strictEqual(byId.search2.await, 'roll:icon', 'step 8 accepts any magnifier card (v0.4.1 insisted on Shortcut: Klaudia soft-lock)');
   st.forEach(function (s) { assert.ok(!/^roll:(?!icon$)/.test(s.await || ''), 'no step gates on one card id: ' + s.id); });
-  assert.strictEqual(UT.v04.rollNeedsIcon, 'Add a {stat} card to the {t.TERM_ROLL} first, then roll.');
+  assert.strictEqual(UT.v04.rollNeedsIcon, 'You\'re holding a card that helps. Add it to the {t.TERM_ROLL} first, then roll.');
   // total 3 vs need 3: 4 of 6 faces in a normal roll (67%), 4 of 4 safe faces in a guided roll (100%)
   assert.strictEqual(Odds.pct(Odds.testOdds(CONFIG, 3, 3).p), 67);
   var g = Odds.testOdds(CONFIG, 3, 3, { guided: true });

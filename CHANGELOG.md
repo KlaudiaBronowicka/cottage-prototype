@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.3 / build 9 (18 Oct 2026)
+- Zosia's final copy: `v04.rollNeedsIcon` ("You're holding a card that helps. Add it to the roll first, then roll.") and the tutorial handoff now says "Tap or hover over anything for a reminder."
+
 ## v0.4.2: tutorial soft-lock fix + coach text floor (2026-10-18, Greg)
 - **Bug (Klaudia, Chrome on Android):** tutorial step 8 ("Search the Yard … add a magnifier card again") only accepted **Shortcut**. Step 4 let you add both Rummage and Shortcut, so Shortcut could already be gone; then Roll did nothing with any other magnifier card (Sharp Eyes in her run) and the step never advanced. The only feedback was a 2.6s toast naming a card she didn't have. Not a touch issue: desktop clicks hit it too.
 - **Fix:** guided Search steps (4 and 8) now gate on **any card with the roll's icon** (`await: 'roll:icon'`), matching the coach text. The step advances from the roll it was gated on (no per-card-id signal). Safety nets: a `roll:<cardId>` gate falls back to any matching card if that card isn't in hand, and to no card if the hand has none, so the tutorial can't soft-lock. Guided rolls take **one card at a time** (a second tap swaps it), which keeps a magnifier for step 8. New placeholder string `v04.rollNeedsIcon` ("Add a magnifier card to the roll first, then roll."), waiting on Zosia.

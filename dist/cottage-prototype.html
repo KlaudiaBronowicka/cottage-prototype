@@ -509,7 +509,7 @@ textarea { width: 100%; height: 100px; background: #0b0c0e; color: var(--paper);
  * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
  * ===================================================================== */
 var CONFIG = {
-  version: 'v0.4.2 Stripped Core (on kit-v0.1 + rules v0.2 + v0.3.2) / build 8',
+  version: 'v0.4.3 Stripped Core (on kit-v0.1 + rules v0.2 + v0.3.2) / build 9',
 
   // ---------- Setup ----------
   startPressure: 0,          // pressure token starts here
@@ -1490,12 +1490,12 @@ var UI_TEXT = {
         { id: 'warning',  hour: 2, target: ['approach', 'visitWarn', 'nextEvent'], text: '{T.TERM_PRESENCE} is at the {t.TRACK_APPROACH_3}. Next {t.TERM_NIGHT} it reaches the {t.TRACK_APPROACH_4}, and {T.TERM_DREAD} will go up. You have 2 {t.TERM_ACTIONS}: use one to search and one to turn it away.' },
         { id: 'search2',  hour: 2, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:icon', text: '{T.ACT_SEARCH} the {t.ZONE_YARD} first while you\'re here. You need 3: add a magnifier card again.' },
         { id: 'bread',    hour: 2, target: ['card-bread'], allow: ['card-bread'], await: 'play:bread', text: 'Now play Bread and Salt. It lowers {T.TERM_DREAD} and sends {t.TERM_PRESENCE} back to the trees. {T.ACT_COMFORT} and Bar the Door also keep it away.' },
-        { id: 'handoff',  hour: 2, target: [], await: 'modal', text: 'You\'re on your own for the last {left} {t.TERM_NIGHTS}. You need {more} more {t.TERM_CLUES}. Watch {T.TERM_DREAD} and {t.TERM_PRESENCE}, and hover over anything for a reminder.' }
+        { id: 'handoff',  hour: 2, target: [], await: 'modal', text: 'You\'re on your own for the last {left} {t.TERM_NIGHTS}. You need {more} more {t.TERM_CLUES}. Watch {T.TERM_DREAD} and {t.TERM_PRESENCE}. Tap or hover over anything for a reminder.' }
       ]
     },
     you: 'You', // the player's token label (no character names in v0.4)
     rollNeedsCard: 'Add {card} to the {t.TERM_ROLL} first, then roll.',
-    rollNeedsIcon: 'Add a {stat} card to the {t.TERM_ROLL} first, then roll.' // v0.4.2 placeholder (Greg), same pattern as rollNeedsCard: for Zosia
+    rollNeedsIcon: 'You\'re holding a card that helps. Add it to the {t.TERM_ROLL} first, then roll.' // Zosia final (v0.4.3)
   },
 
   // ---------- How to play (Clarity Pass §9.4, 153 words) ----------
