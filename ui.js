@@ -536,7 +536,7 @@
   function approachHTML() {
     if (!PON()) return '';
     var G = U.game, S = G.state, sp = G.cfg.presence.spaces, fc = G.presenceForecast(), warn = !!(fc && fc.visit) && S.phase === 'actions' && !(V4 && S.bars); // v0.4: only while no Bar is up
-    var ab = layoutBox('approach'), TS = PA('trackSize') || [1000, 280], k = ab.h / TS[1], mk = (PDIR && PA('marker' + PDIR)) || PA('marker'), ms = BL.presenceMarker;
+    var ab = layoutBox('approach'), TS = PA('trackSize') || [1000, 280], k = ab.h / TS[1], mk = (PDIR && PA('marker' + PDIR)) || PA('markerNeutral') || PA('marker'), ms = BL.presenceMarker;
     var steps = PA('steps') && PA('steps').length === sp.length ? PA('steps') : sp.map(function (id, i) { return { id: id, x: 20 + i * 245, y: 16, w: 200, h: 156, name: { x: 20 + i * 245, y: 190, w: 200, h: 66 } }; });
     var cells = steps.map(function (st, i) {
       var id = sp[i], nm = term('TRACK_APPROACH_' + (i + 1));
@@ -591,7 +591,7 @@
     var i = 0, t = setInterval(function () { i++; if (i < frames.length) im.src = frames[i]; else { clearInterval(t); setTimeout(function () { el.remove(); }, ms || 600); } }, 1000 / (BL.fxFps || 8));
   }
   function visitBanner(f) {
-    var fx = null, art = PDIR ? PA('art' + PDIR) : null;
+    var fx = null, art = PDIR ? PA('art' + PDIR) : PA('artNeutral');
     if (f.type === 'visit') { playFrames(PA('handleFx'), 'doorHandle', 900, 'handle'); playFrames(PA('frostWindowFx'), 'window', 1600, 'frost'); playFrames(PA('frostScreenFx'), 'fullStage', 1400, 'frostscreen'); }
     else if (PA('barStopped')) playFrames([PA('barStopped'), PA('barStopped'), PA('barStopped'), PA('barStopped'), PA('barStopped'), PA('barStopped')], 'barOnDoor', 1200, 'barstop');
     var door = flav(PT.door[f.line % PT.door.length]), c1 = ECFG.noCompanions ? null : flav(PT.c1), bl = flav(PT.turnAway.bar);
@@ -736,11 +736,31 @@
     if (U.tray) wireTray();
   }
 
-  // ---------- card zoom (screen pixels, readable at any window size) ----------
+  // ---------- card zoom / v0.4.1 card_inspect (exactly 2x hand card in Ola's boxes) ----------
   function showZoom(id, anchor, pin) {
     closeZoom(); U.pinned = pin ? id : null;
     var G = U.game, can = G ? G.canPlay(id) : { ok: false }, S = G && G.state;
     var why = !can.ok ? (can.why === 'no action' ? P('reasons.noActions') : can.why) : '';
+    if (V4 && layoutBox('cardInspect')) {
+      // stage-space boxes so the card is exactly 380x532 (2x hand) and scales with the stage
+      var ib = layoutBox('cardInspect'), bb = layoutBox('cardInspectBar');
+      var zw = BL.handCard.inspectW || ib.w || 380;
+      var el = document.createElement('div'); el.id = 'zoom'; el.className = 'zoom inspect stageZoom' + (pin ? ' pinned' : '');
+      el.style.cssText = box(ib);
+      el.innerHTML = cardHTML(id, { w: zw, variant: BL.handCard.variant || 'hand' });
+      stage.appendChild(el);
+      if (pin && S && S.phase === 'actions' && bb) {
+        var bar = document.createElement('div'); bar.id = 'zoomBar'; bar.className = 'zoomBar inspectBar stageZoom';
+        bar.style.cssText = box(bb);
+        var playOk = can.ok && (!U.tut || tutAllows('card-' + id));
+        bar.innerHTML = '<button class="primary" id="zoomPlay" data-ctl="card-' + id + '"' + (playOk ? '' : ' disabled') + tipA(playOk ? P('cardUi.playTip', { effect: P('cards.' + id + '.text') }) : why) + '>' + X('cardUi.play') + ' · 1 ' + esc(term('TERM_ACTION')) + '</button>' +
+          (playOk ? '' : '<div class="zwhy">' + esc(why) + '</div>') + '<div class="zhint">' + X('cardUi.addHint') + '</div>';
+        stage.appendChild(bar);
+        on('zoomPlay', function (e) { e.stopPropagation(); playCard(id); });
+      }
+      if (pin) placeCoach();
+      return;
+    }
     var zw = Math.round(Math.min(340, window.innerHeight * 0.42)), r = anchor.getBoundingClientRect();
     var el = document.createElement('div'); el.id = 'zoom'; el.className = 'zoom' + (pin ? ' pinned' : '');
     el.innerHTML = cardHTML(id, { w: zw }) + (pin && S && S.phase === 'actions' ? '<div class="zoomBar"><button class="primary" id="zoomPlay" data-ctl="card-' + id + '"' + (can.ok ? '' : ' disabled') + tipA(can.ok ? P('cardUi.playTip', { effect: P('cards.' + id + '.text') }) : why) + '>' + X('cardUi.play') + ' · 1 ' + esc(term('TERM_ACTION')) + '</button>' +
@@ -769,8 +789,8 @@
     el.style.left = Math.max(8, Math.min(window.innerWidth - zw - 8, r.left + r.width / 2 - zw / 2)) + 'px';
     el.style.top = Math.min(window.innerHeight - el.getBoundingClientRect().height - 8, r.bottom + 10) + 'px';
   }
-  function closeZoom() { var had = U.pinned; U.pinned = null; var z = document.getElementById('zoom'); if (z) z.remove(); if (had && U.tut) placeCoach(); }
-  document.addEventListener('click', function (e) { if (U.pinned && !e.target.closest('#zoom') && !e.target.closest('.hcard')) closeZoom(); });
+  function closeZoom() { var had = U.pinned; U.pinned = null; var z = document.getElementById('zoom'); if (z) z.remove(); var zb = document.getElementById('zoomBar'); if (zb) zb.remove(); if (had && U.tut) placeCoach(); }
+  document.addEventListener('click', function (e) { if (U.pinned && !e.target.closest('#zoom') && !e.target.closest('#zoomBar') && !e.target.closest('.hcard')) closeZoom(); });
 
   // ---------- ROLL DIALOG (adding cards is a step inside it) ----------
   function openTray(o) {
@@ -969,21 +989,28 @@
     U.screen = 'results'; clearToasts(); endCoach(true); saveRun();
     var G = U.game, S = G.state, R = S.result, Pr = S.presence;
     var rows = [['v04.end.rowClues', R.clues + ' / ' + R.clueGoal], ['v04.end.rowDread', R.finalPressure + ' / ' + G.cfg.pressureMax], ['v04.end.rowHours', R.hoursPlayed + ' / ' + G.cfg.rounds]];
-    if (Pr) rows.push(['v04.end.rowVisits', Pr.visits + ' (' + Pr.blocked + ')']);
+    if (Pr) rows.push(['v04.end.rowVisits', Pr.visits + ' · Bar held ' + Pr.blocked]); // visits = Door reached with no Bar; Bar held = blocked
     // Ola's end screens (end/win|dread|dawn_fail) with live text in end_screens.boxes: title, result_line, play_again, play_with_tutorial
     var E = A.end || { boxes: {}, bg: {}, bgSmall: {}, titleColour: {} }, EB = E.boxes, bg = (U.bgSmallOk && E.bgSmall[R.outcome]) || E.bg[R.outcome];
     var eb = function (k, d) { return box(EB[k] || d); };
+    var statsArt = E.statsPanel ? '<img class="endStatsPanel" src="' + E.statsPanel + '" alt="" draggable="false" style="' + eb('stats_row', { x: 560, y: 420, w: 800, h: 196 }) + '">' : '';
+    var line1 = rows.slice(0, 3).map(function (r) { return '<b>' + X(r[0]) + '</b> ' + esc(r[1]); }).join(' · ');
+    var line2 = rows.length > 3 ? rows.slice(3).map(function (r) { return '<b>' + X(r[0]) + '</b> ' + esc(r[1]); }).join(' · ') : '';
     stage.innerHTML = (bg ? '<img class="boardbg endbg" src="' + bg + '" alt="" draggable="false">' : bgHTML('dim')) +
       '<div class="endScreen v04 ' + R.outcome + ' t-' + (E.titleColour[R.outcome] || 'paper') + '" id="endScreen" data-result="' + R.outcome + '">' +
       '<div class="endTitle" id="endTitle" style="' + eb('title', { x: 460, y: 96, w: 1000, h: 120 }) + '"><span>' + X('v04.end.' + R.outcome + '.title', { n: R.clues }) + '</span></div>' +
       '<div class="endResult" id="endResult" style="' + eb('result_line', { x: 460, y: 222, w: 1000, h: 64 }) + '"><span>' + X('v04.end.' + R.outcome + '.result', { n: R.clues }) + '</span></div>' +
-      '<button class="primary big endBtn" id="bAgain" style="' + eb('play_again', { x: 610, y: 320, w: 340, h: 76 }) + '"' + tipA(P('v04.end.playAgainTip')) + '>' + X('v04.end.playAgain') + '</button>' +
-      '<button class="big endBtn" id="bTutAgain" style="' + eb('play_with_tutorial', { x: 970, y: 320, w: 340, h: 76 }) + '"' + tipA(P('v04.end.playTutorialTip')) + '>' + X('v04.end.playTutorial') + '</button>' +
-      '<div class="endStats" id="endStats">' + rows.map(function (r) { return '<span><b>' + X(r[0]) + '</b> ' + esc(r[1]) + '</span>'; }).join('') +
-      '<span class="muted">' + X('ui.savedNote', { n: store.all().length }) + '</span><button id="bStats2"' + tipA(P('ui.sendStatsTip')) + '>' + X('ui.sendStats') + '</button></div></div>';
-    on('bAgain', function () { U.seed = newSeed(); U.runId = null; U.tStart = 0; U.saved = false; startEncounter({ tutorial: false }); });
+      '<button class="primary big endBtn" id="bAgain" autofocus style="' + eb('play_again', { x: 610, y: 320, w: 340, h: 76 }) + '"' + tipA(P('v04.end.playAgainTip')) + '>' + X('v04.end.playAgain') + '</button>' +
+      '<button class="big endBtn secondary" id="bTutAgain" style="' + eb('play_with_tutorial', { x: 970, y: 320, w: 340, h: 76 }) + '"' + tipA(P('v04.end.playTutorialTip')) + '>' + X('v04.end.playTutorial') + '</button>' +
+      statsArt +
+      '<div class="endStats" id="endStats" style="' + eb('run_stats', { x: 584, y: 432, w: 752, h: 108 }) + '">' +
+      '<div class="es1">' + line1 + '</div>' + (line2 ? '<div class="es2">' + line2 + '</div>' : '') +
+      '<div class="es3 muted">' + X('ui.savedNote', { n: store.all().length }) + '</div></div>' +
+      '<button class="endSend secondary" id="bStats2" style="' + eb('send_results', { x: 810, y: 548, w: 300, h: 56 }) + '"' + tipA(P('ui.sendStatsTip')) + '>' + X('ui.sendStats') + '</button></div>';
+    on('bAgain', function () { U.seed = newSeed(); U.runId = null; U.tStart = 0; U.saved = false; U.wantTutorial = false; startEncounter({ tutorial: false }); });
     on('bTutAgain', function () { U.seed = newSeed(); U.runId = null; U.tStart = 0; U.saved = false; U.wantTutorial = true; startEncounter({ tutorial: true }); });
     on('bStats2', openStats);
+    var bAgain = document.getElementById('bAgain'); if (bAgain) bAgain.focus(); // primary default: Enter starts a fresh run with no tutorial
     renderDebug();
   }
 
@@ -1093,7 +1120,7 @@
     var W = window.innerWidth, Hh = window.innerHeight, rects = [];
     var tg = U.tray && s.trayTarget ? (U.tray.result ? ['rollResult'] : s.trayTarget) : s.target; // v0.4: inside the roll window, highlight the adds + Roll, then the result
     (tg || []).forEach(function (id) { var e = document.getElementById(id); if (e) { var r = e.getBoundingClientRect(); if (r.width) rects.push(r); } });
-    var zm = document.getElementById('zoom'); if (zm && zm.classList.contains('pinned') && (s.allow || []).some(function (x) { return /^card-/.test(x); })) rects.push(zm.getBoundingClientRect());
+    var zm = document.getElementById('zoom'); if (zm && zm.classList.contains('pinned') && (s.allow || []).some(function (x) { return /^card-/.test(x); })) { rects.push(zm.getBoundingClientRect()); var zb = document.getElementById('zoomBar'); if (zb) rects.push(zb.getBoundingClientRect()); }
     var holes = rects.map(function (r) { return '<rect x="' + (r.left - 8) + '" y="' + (r.top - 8) + '" width="' + (r.width + 16) + '" height="' + (r.height + 16) + '" rx="10" fill="black"/>'; }).join('');
     var rings = rects.map(function (r) { return '<div class="coachRing" style="left:' + (r.left - 8) + 'px;top:' + (r.top - 8) + 'px;width:' + (r.width + 16) + 'px;height:' + (r.height + 16) + 'px"></div>'; }).join('');
     var voice = s.voice ? lineParts(s.voice) : null;
@@ -1113,7 +1140,7 @@
     if (V4) { // v0.4 layout v3: coach text in the hint_line strip; the handoff in tutorial_modal (stage boxes → screen pixels)
       var sr = stage.getBoundingClientRect(), cb = layoutBox(s.await === 'modal' ? 'tutorialModal' : 'coach');
       b.style.left = (sr.left + cb.x * SCALE) + 'px'; b.style.top = (sr.top + cb.y * SCALE) + 'px'; b.style.width = (cb.w * SCALE) + 'px';
-      b.style.minHeight = (cb.h * SCALE) + 'px'; b.style.fontSize = ((s.await === 'modal' ? 20 : 17) * SCALE) + 'px';
+      b.style.minHeight = (cb.h * SCALE) + 'px'; b.style.fontSize = ((s.await === 'modal' ? 20 : 19) * SCALE) + 'px'; // v0.4.1 hint_line is 120 tall → 19-20px coach text
     } else if (rects.length) {
       var u = rects.reduce(function (a, r) { return { l: Math.min(a.l, r.left), t: Math.min(a.t, r.top), r: Math.max(a.r, r.right), b: Math.max(a.b, r.bottom) }; }, { l: 1e9, t: 1e9, r: -1e9, b: -1e9 });
       x = (u.l + u.r) / 2 - bw / 2;

@@ -36,6 +36,8 @@ var BOARD_LAYOUT = {
     tutorialModal:'tutorial_modal',        // v0.4 tutorial handoff (step 10)
     skipTutorial: 'skip_tutorial',         // v0.4 "Skip tutorial" corner button (tutorial only)
     tray:         'roll_tray',             // roll dialog (overlay box, in the zone band)
+    cardInspect:  'card_inspect',          // v0.4.1: hovered/clicked hand card at exactly 2x (380x532)
+    cardInspectBar:'card_inspect_bar',     // v0.4.1: Play button for the inspected card (pinned only)
     // OVERRIDE (no manifest box): the night-start / visit banner, a transient overlay centred in the zone band
     banner:       { x: 460, y: 410, w: 1000, h: 220 }
   },
@@ -46,8 +48,8 @@ var BOARD_LAYOUT = {
     plateSlots: { title: { x: 24, y: 240, w: 200, h: 30 }, need_reward: { x: 24, y: 272, w: 432, h: 36 }, markers: { x: 24, y: 24, w: 432, h: 120 } }
   },
   zones: 'manifest',                                     // use manifest board.zones (house, yard, treeline)
-  zoneStripH: 40,                                        // live text strip at the bottom of each zone box (6px from the bottom: y722-762; v0.4 zones y340 h428, art strip board/zone_strip_<zone>;
-                                                         //   clear of the Yard footprint ring, which ends at about y703 in board_bg v3)
+  zoneStripH: 40,                                        // live text strip at the bottom of each zone box (v0.4.1: strips flush at zone bottom y728-768 (CSS bottom:0); zones y364 h404; art strip board/zone_strip_<zone>;
+                                                         //   clear of the Yard footprint ring, which ends at about y723 in board_bg v0.4.1)
   // Token anchors as fractions (0..1) of each zone box: where each token's centre sits.
   tokenSize: 112,
   tokens: {
@@ -55,7 +57,7 @@ var BOARD_LAYOUT = {
     C1:  { house: [0.80, 0.50], yard: [0.70, 0.46], treeline: [0.66, 0.48] },
     C2:  { house: [0.44, 0.54] }                         // COMPANION 2 never leaves the House
   },
-  handCard: { w: 190, overlap: 26, liftOnHover: 60, variant: 'hand' }, // 190x266 = the manifest hand box (layout v2); 'hand' = the artist's hand frame, 'full' = v2 look
+  handCard: { w: 190, overlap: 26, liftOnHover: 60, variant: 'hand', inspectW: 380 }, // 190x266 hand; inspect = exactly 2x (v0.4.1 card_inspect); 'hand' frame
   presenceMarker: 82,                                    // token_128 at the track's 0.643 scale
   nextEventZoomW: 300,                                   // hover zoom of the next-event card (stage px)
   fxFps: 8,                                              // visit / Bar FX frame rate (artist: ~8 fps); prefers-reduced-motion shows one frame

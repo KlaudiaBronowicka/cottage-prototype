@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.1: Tomek rulings + Zosia FINAL copy (2026-10-18, Greg)
+- **Lose-dread headlines (Tomek):** title "The dark got in." · result "You couldn't hold on until dawn." (was "Dread hit 6. / The night broke.").
+- **End screen (Tomek):** Play again is the clear primary (ochre, autofocus / focused so Enter starts a fresh run with no tutorial); Play with tutorial stays secondary. Visit stat value reads "N · Bar held M".
+- **Copy (Zosia FINAL):** 7 card flavours; neutral door + Bread and Salt; How to play (5 paragraphs + Strong success glossary row); end row labels / tips; `rollNeedsCard`; coach "Your turn…" / skip tip. `{T.TERM_NIGHT}` still renders **Hour**.
+- **Docs:** Tomek's rulings recorded in `docs/v04-notes.md` (wardNeedsTarget kept, Shortcut either way, Bread and Salt → Treeline in the fallback, visit warning hidden under a Bar, title page OK, end lines split, our engine is the reference sim).
+- **Art (Ola v0.4.1 layout pass):** re-imported. Board art +20px lower; hint_line 120; zones y364; night_counter 480; deck 210; roll_tray y364; door FX +20y. New `card_inspect` / `card_inspect_bar` (hand card at exactly 2×), `end/stats_panel` + run_stats/send_results boxes (old y966 strip dropped). Neutral creature `artNeutral` / `markerNeutral`. Coach text back at 19px; candle/deck spacing restored. Art-fit: `tests/art-fit-report-v041.txt`.
+- Build label `v0.4.1 … / build 7`. `?v04=0` still plays the untouched v0.3.2 path.
+
 ## v0.4: Stripped Core (2026-10-18, Greg)
 Spec `gdd/v04/encounter-v0.4.md`. Everything sits behind `CONFIG.v04` (on by default); **`?v04=0` plays the v0.3.2 build**.
 - **Cut:** story/VN, Questions, companions, NERVE. **Night → Hour** everywhere (terms, HUD, log, tooltips, tutorial).

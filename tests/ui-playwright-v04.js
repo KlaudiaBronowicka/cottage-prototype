@@ -43,7 +43,7 @@ var GOAL = 'Goal: Find ' + CONFIG.v04.clueGoal + ' Clues before dawn (' + CONFIG
     n++;
   }
   await page.goto(url + '?seed=7'); await shot('01-intro');
-  assert(/v0\.4/.test(await page.textContent('.buildtag')), 'build label v0.4');
+  assert(/v0\.4\.1/.test(await page.textContent('.buildtag')), 'build label v0.4.1');
 
   // 2) the 10-step tutorial
   await page.goto(url + '?seed=7&tutorial=1'); await page.click('#bStart'); await page.waitForTimeout(2800);
@@ -93,7 +93,23 @@ var GOAL = 'Goal: Find ' + CONFIG.v04.clueGoal + ' Clues before dawn (' + CONFIG
   await page.click('[data-zonepick="2"]'); await page.waitForTimeout(200); assert(/Treeline/.test(await page.textContent('#tray .tt')), 'picked the Treeline');
   await page.click('#rollGo'); await page.waitForTimeout(400); await page.click('#rollDone'); await page.waitForTimeout(300); n++;
 
-  // 4) all 3 end screens (Ola's art; title + result_line read as the spec line)
+  // 4) card inspect (v0.4.1): hover shows 2x card in card_inspect; click pins Play in card_inspect_bar; Esc closes
+  await page.goto(url + '?seed=21&tutorial=0'); await page.click('#bStart'); await page.waitForTimeout(2600);
+  var first = await page.$('.hcard'); assert(first, 'hand has a card');
+  await first.hover(); await page.waitForTimeout(200);
+  assert(await page.$('#zoom.inspect'), 'hover opens card_inspect');
+  var iw = await page.$eval('#zoom', function (e) { var s = document.getElementById('stage').getBoundingClientRect().width / 1920; return Math.round(e.getBoundingClientRect().width / s); });
+  assert(iw === 380, 'inspect width is 380 stage px, got ' + iw);
+  await shot('09-inspect-hover');
+  await first.click(); await page.waitForTimeout(200);
+  assert(await page.$('#zoom.inspect.pinned'), 'click pins inspect');
+  assert(await page.$('#zoomBar #zoomPlay'), 'pinned inspect shows Play in card_inspect_bar');
+  await shot('09b-inspect-pinned');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  assert(!(await page.$('#zoom')), 'Esc closes inspect');
+  n++;
+
+  // 5) all 3 end screens (Ola's art; title + result_line read as the spec line)
   for (var oc of [['win', 31], ['lose_dread', 0], ['lose_short', 0]]) {
     await page.goto(url + '?seed=5&tutorial=0'); await page.click('#bStart'); await page.waitForTimeout(2600);
     await page.evaluate(function (oc) { var g = window.__game, S = g.state; S.progress = oc === 'win' ? 5 : 2; if (oc === 'lose_dread') { S.pressure = 5; } }, oc[0]);
@@ -102,11 +118,28 @@ var GOAL = 'Goal: Find ' + CONFIG.v04.clueGoal + ' Clues before dawn (' + CONFIG
     await page.waitForTimeout(500);
     var res = await page.getAttribute('#endScreen', 'data-result'); assert(res === oc[0], 'end screen ' + oc[0] + ' got ' + res);
     var bgSrc = await page.getAttribute('.endbg', 'src'); assert(bgSrc && /end\//.test(bgSrc), 'end art ' + bgSrc);
+    assert(await page.$('.endStatsPanel'), 'stats_panel art');
+    assert(await page.$('#endStats'), 'run_stats box');
+    assert(await page.$('#bStats2'), 'send_results button');
     var line = (await page.textContent('#endTitle')) + ' ' + (await page.textContent('#endResult'));
-    var expect = { win: 'Dawn. You made it, with 5 clues.', lose_dread: 'Dread hit 6. The night broke.', lose_short: 'Dawn came, but you only found 2 of 5 clues.' }[oc[0]];
+    var expect = { win: 'Dawn. You made it to morning, with 5 clues.', lose_dread: 'The dark got in. You couldn\'t hold on until dawn.', lose_short: 'Dawn came, but you only found 2 of 5 clues.' }[oc[0]];
     assert(line === expect, 'end line ' + oc[0] + ': ' + line);
     await shot('08-end-' + oc[0]); n++;
   }
+  await shot('10-end'); // one end-screen shot for the v0.4.1 report
+  // 6) Play again is primary + focused; Enter starts a fresh run that skips the tutorial
+  assert(await page.$eval('#bAgain', function (e) { return e.classList.contains('primary'); }), 'Play again is primary');
+  assert(await page.$eval('#bTutAgain', function (e) { return !e.classList.contains('primary'); }), 'Play with tutorial is not primary');
+  assert(await page.$eval('#bAgain', function (e) { return document.activeElement === e; }), 'Play again is focused');
+  await page.keyboard.press('Enter'); await page.waitForTimeout(2800);
+  assert(!(await page.$('#coachBubble')) && !(await page.$('#skipTut')) && !(await page.$('#introPanel')), 'Play again skips the tutorial');
+  assert(await page.$('#act-end') || await page.$('#hand'), 'fresh encounter after Play again');
+  n++;
+  // Play with tutorial still works from a fresh end screen
+  await page.goto(url + '?seed=5&tutorial=0'); await page.click('#bStart'); await page.waitForTimeout(2600);
+  await page.evaluate(function () { var S = window.__game.state; S.progress = 5; });
+  for (var k3 = 0; k3 < 30; k3++) { var s3 = await st(); if (s3.phase === 'done') break; await page.evaluate(function () { window.__game.state.pressure = 0; }); if (s3.phase === 'discard') { await page.click('[data-discard]'); continue; } await page.click('#act-end'); await page.waitForTimeout(150); }
+  await page.waitForTimeout(400);
   await page.click('#bTutAgain'); await page.waitForTimeout(400); assert(await page.$('#introPanel') || await page.$('#coachBubble'), 'Play with tutorial goes back in');
   var br = await broken(); assert(!br.length, 'broken images ' + br.join(', '));
   assert(!errors.length, 'console errors:\n' + errors.join('\n'));
