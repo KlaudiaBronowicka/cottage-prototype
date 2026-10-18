@@ -376,7 +376,7 @@ var UI_TEXT = {
       A: {
         label: 'A · the domowik',
         terms: { TERM_PRESENCE: 'the domowik' },
-        howTease: 'Something small walks the edge of the house at night.', // How to play, one line (v0.3.1)
+        howTease: 'Something small walks the edge of the house in the dark.', // How to play, one line (v0.3.1)
         door: ['Three knocks, low on the door, like someone very short. Then the stove goes out.',
                'Something small rattles the handle, impatient, and every pan in the kitchen rings at once.',
                'A sigh at the keyhole, old and tired. The kitchen goes cold.'],
@@ -395,7 +395,7 @@ var UI_TEXT = {
       B: {
         label: 'B · the zmora',
         terms: { TERM_PRESENCE: 'the zmora' },
-        howTease: 'Something walks barefoot around the cottage at night, looking for a way in.',
+        howTease: 'Something walks barefoot around the cottage in the dark, looking for a way in.',
         door: ['The handle doesn\'t turn. Something comes through the keyhole anyway, thin as a straw.',
                'A weight settles on the end of the bed. Nobody is sitting there.',
                'Everyone\'s breath goes short at once, as if the air got heavy.'],

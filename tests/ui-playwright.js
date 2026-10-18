@@ -233,7 +233,7 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
     var txt = await page.evaluate(function () { return document.body.innerText + ' ' + Array.prototype.map.call(document.querySelectorAll('[data-tip]'), function (e) { return e.getAttribute('data-tip'); }).join(' '); });
     WHATS.forEach(function (w) { var frag = w.slice(-50); assert(txt.indexOf(frag) < 0, 'WHAT IT IS not rendered (' + where + '): ' + frag); });
   }
-  assert(/Something walks barefoot around the cottage at night, looking for a way in\./.test(await page.textContent('#howPresence')), 'How to play tease (B)');
+  assert(/Something walks barefoot around the cottage in the dark, looking for a way in\./.test(await page.textContent('#howPresence')), 'How to play tease (B)');
   var breadB = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }).replace(/<img[^>]*>/g, ''); /* text only: no image loads to abort on navigation */ return { eff: h.querySelector('.c-effect').textContent, flav: h.querySelector('.c-flav').textContent }; });
   assert(/(^|\s)Dread −1 and the zmora goes back to the Treeline\.$/.test(breadB.eff.trim()) && breadB.flav.trim() === 'Promise it bread in the morning', 'Bread and Salt text (B): ' + JSON.stringify(breadB));
   BREAD_SEEN.B = breadB.eff.trim();
@@ -242,7 +242,7 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   await page.click('#ovClose');
   await page.goto(url + '?seed=5&tutorial=0&presence=A'); await page.click('#bSkip'); await page.click('#bGo'); await page.waitForTimeout(2700);
   await page.click('#btnMenu'); await page.click('#mHow'); await page.waitForTimeout(200);
-  assert(/Something small walks the edge of the house at night\./.test(await page.textContent('#howPresence')), 'How to play tease (A)');
+  assert(/Something small walks the edge of the house in the dark\./.test(await page.textContent('#howPresence')), 'How to play tease (A)');
   await noWhatItIs('How to play A'); await page.click('#ovClose');
   // Bread and Salt shows exactly the final text (effect; flavour by direction) in the hand and in the full card
   var breadA = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }).replace(/<img[^>]*>/g, ''); /* text only: no image loads to abort on navigation */ return { eff: h.querySelector('.c-effect').textContent, flav: h.querySelector('.c-flav').textContent }; });

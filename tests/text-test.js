@@ -89,8 +89,8 @@ console.log('ALL TEXT CHECKS PASSED');
    [play.voiceBread.B, '{POV}: [whispering] Bread and salt in the morning. I promise. [beat] I mean it.'],
    [play.voiceBread.neutral, '{C2}: Bread and salt. Old manners, but they still work.'],
    [play.voice, "{C2}: Drink. The {HOST} said don't waste it, and I'm scared of her."],
-   [D.A.howTease, 'Something small walks the edge of the house at night.'],
-   [D.B.howTease, 'Something walks barefoot around the cottage at night, looking for a way in.'],
+   [D.A.howTease, 'Something small walks the edge of the house in the dark.'],
+   [D.B.howTease, 'Something walks barefoot around the cottage in the dark, looking for a way in.'],
    [UT2.tour.presence, "{C2}: It's at the trees now. Every hour it comes a little closer. We don't fight it. We turn it away."]
   ].forEach(function (p) { if (p[0] !== p[1]) throw new Error('v0.3.1 copy not verbatim: ' + p[0]); });
   // Bread and Salt FINAL text (Klaudia, v0.3.1): shown exactly
