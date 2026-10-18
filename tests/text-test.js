@@ -90,7 +90,7 @@ console.log('ALL TEXT CHECKS PASSED');
    [UT2.tour.presence, "{C2}: It's at the trees now. Every hour it comes a little closer. We don't fight it. We turn it away."]
   ].forEach(function (p) { if (p[0] !== p[1]) throw new Error('v0.3.1 copy not verbatim: ' + p[0]); });
   // Bread and Salt FINAL text (Klaudia, v0.3.1): shown exactly
-  if (UT2.cards.bread.text !== 'Dread -1 and the Presence goes back to the Treeline.') throw new Error('Bread and Salt effect text is not the final text');
+  if (UT2.cards.bread.text !== '{T.TERM_DREAD} −1 and {t.TERM_PRESENCE} goes back to the {t.TRACK_APPROACH_1}.') throw new Error('Bread and Salt effect text: expected the templated text (v0.3.2)');
   if (D.A.offeringAction !== 'Leave bread and salt by the stove' || D.B.offeringAction !== 'Promise it bread in the morning') throw new Error('Bread and Salt flavour A/B not final');
   // 'WHAT IT IS' writer notes (Questions spoiler) must not be in any player-facing source
   var whats = md.split('\n').filter(function (l) { return /^WHAT IT IS:/.test(l); }).map(function (l) { return l.replace(/^WHAT IT IS:\s*/, ''); })

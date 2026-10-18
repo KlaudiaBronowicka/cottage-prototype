@@ -56,7 +56,7 @@ var UI_TEXT = {
     torch:   { cat: 'utility', name: 'Torch',                 text: 'Your next {t.ACT_SEARCH} this {t.TERM_NIGHT} needs 1 less.', flavour: 'The beam stops exactly where the trees begin.' },
     phone:   { cat: 'utility', name: 'Phone at 4%',           text: 'Draw 2 cards.', flavour: "One bar of signal. One message you shouldn't read." },
     // v0.3 (presence on): replaces Kompot. Flavour = the direction's offering line (Tomek-approved), via '@dir:'.
-    bread:   { cat: 'calm',    name: 'Bread and Salt',        text: 'Dread -1 and the Presence goes back to the Treeline.', flavour: '@dir:offeringAction' }, // FINAL text (Klaudia, v0.3.1), shown exactly: no term substitution
+    bread:   { cat: 'calm',    name: 'Bread and Salt',        text: '{T.TERM_DREAD} −1 and {t.TERM_PRESENCE} goes back to the {t.TRACK_APPROACH_1}.', flavour: '@dir:offeringAction' }, // v0.3.2 (Tomek): templated like every card; creature name by direction, generic Presence term with the Presence off
     pierogi: { cat: 'utility', name: 'Burnt Pierogi',         text: 'Ready a used {t.TERM_HELP} again.', flavour: 'Slightly burned. Still the best thing tonight.' } // only if rules.chairForPierogi is OFF
   },
   events: {

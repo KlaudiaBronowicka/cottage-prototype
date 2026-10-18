@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.2: Bread and Salt text templating (2026-10-18, Greg)
+- Tomek: tour step 4 keeps the creature name (domowik/zmora) as built.
+- Tomek: the Bread and Salt effect uses the same templating as every card: `{T.TERM_DREAD} −1 and {t.TERM_PRESENCE} goes back to the {t.TRACK_APPROACH_1}.` (real minus sign). Renders "Dread −1 and the domowik/zmora goes back to the Treeline."; with the Presence off, the generic term ("the Presence"); a Dread rename / `?terms=` reaches it. Text and Playwright tests updated (A, B, off, `?terms=TERM_DREAD:Fear`).
+
 ## v0.3.1: copy patch + Tomek's Bar ruling (2026-10-18, Greg)
 - **Rule (Tomek), flag `presence.barSavesForVisit`, default ON:** if the face-up forecast shows tonight's footprint step(s) (incl. the nights 5-6 extra step) taking the Presence to the Door, an up Bar is held for the visit and the night event gets no Bar protection. Otherwise the Bar still stops whichever comes first. Visit warning, Bar tooltip and next-event tooltip say the Bar is saved for the visit; a toast notes it on the night. New stats column `barHeldForVisit`. Smoke tests: held Bar (footprint and late step), no visit coming, flag off. Sim rerun (`tests/sim-presence-report.txt`, rows with the flag on and off).
 - Tomek confirmed v0.3 design readings 1-9 as built.

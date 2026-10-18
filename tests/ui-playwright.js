@@ -18,7 +18,7 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   var browser = await chromium.launch({ executablePath: exe, headless: true });
   var ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, acceptDownloads: true });
   var page = await ctx.newPage();
-  var errors = [];
+  var errors = [], BREAD_SEEN = {};
   page.on('pageerror', function (e) { errors.push('pageerror: ' + e.message); });
   page.on('console', function (m) { if (m.type() === 'error' || m.type() === 'warning') errors.push('console: ' + m.text()); });
   page.on('requestfailed', function (r) { errors.push('request failed: ' + r.url()); });
@@ -231,8 +231,9 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
     WHATS.forEach(function (w) { var frag = w.slice(-50); assert(txt.indexOf(frag) < 0, 'WHAT IT IS not rendered (' + where + '): ' + frag); });
   }
   assert(/Something walks barefoot around the cottage at night, looking for a way in\./.test(await page.textContent('#howPresence')), 'How to play tease (B)');
-  var breadB = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }); return { eff: h.querySelector('.c-effect').textContent, flav: h.querySelector('.c-flav').textContent }; });
-  assert(/Dread -1 and the Presence goes back to the Treeline\.$/.test(breadB.eff.trim()) && breadB.flav.trim() === 'Promise it bread in the morning', 'Bread and Salt final text (B): ' + JSON.stringify(breadB));
+  var breadB = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }).replace(/<img[^>]*>/g, ''); /* text only: no image loads to abort on navigation */ return { eff: h.querySelector('.c-effect').textContent, flav: h.querySelector('.c-flav').textContent }; });
+  assert(/(^|\s)Dread −1 and the zmora goes back to the Treeline\.$/.test(breadB.eff.trim()) && breadB.flav.trim() === 'Promise it bread in the morning', 'Bread and Salt text (B): ' + JSON.stringify(breadB));
+  BREAD_SEEN.B = breadB.eff.trim();
   await noWhatItIs('How to play B');
   await shot('27-how-to-play-presence-B');
   await page.click('#ovClose');
@@ -241,10 +242,17 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   assert(/Something small walks the edge of the house at night\./.test(await page.textContent('#howPresence')), 'How to play tease (A)');
   await noWhatItIs('How to play A'); await page.click('#ovClose');
   // Bread and Salt shows exactly the final text (effect; flavour by direction) in the hand and in the full card
-  var breadA = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }); return { eff: h.querySelector('.c-effect').textContent, flav: h.querySelector('.c-flav').textContent }; });
-  assert(/(^|\s)Dread -1 and the Presence goes back to the Treeline\.$/.test(breadA.eff.trim()) && breadA.flav.trim() === 'Leave bread and salt by the stove', 'Bread and Salt final text (A): ' + JSON.stringify(breadA));
+  var breadA = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }).replace(/<img[^>]*>/g, ''); /* text only: no image loads to abort on navigation */ return { eff: h.querySelector('.c-effect').textContent, flav: h.querySelector('.c-flav').textContent }; });
+  assert(/(^|\s)Dread −1 and the domowik goes back to the Treeline\.$/.test(breadA.eff.trim()) && breadA.flav.trim() === 'Leave bread and salt by the stove', 'Bread and Salt text (A): ' + JSON.stringify(breadA));
+  BREAD_SEEN.A = breadA.eff.trim();
   // tour step 8 line: A / B with Bread and Salt; Presence off deals Kompot and keeps the Kompot line
   var tourPlay = {};
+  // Bread and Salt with the Presence off (no creature: generic term) and with a Dread rename via ?terms=
+  for (var bq of [['off', '?presence=off', /(^|\s)Dread −1 and the Presence goes back to the Treeline\.$/], ['terms', '?terms=TERM_DREAD:Fear', /(^|\s)Fear −1 and the domowik goes back to the Treeline\.$/]]) {
+    await page.goto(url + bq[1]); await page.waitForTimeout(150);
+    var bt = await page.evaluate(function () { var h = document.createElement('div'); h.innerHTML = window.__ui.cardHTML('bread', { w: 340 }).replace(/<img[^>]*>/g, ''); /* text only: no image loads to abort on navigation */ return h.querySelector('.c-effect').textContent.trim(); });
+    assert(bq[2].test(bt), 'Bread and Salt text (' + bq[0] + '): ' + bt); BREAD_SEEN[bq[0]] = bt;
+  }
   for (var tp of ['A', 'B', 'off']) {
     await page.goto(url + '?presence=' + tp); await page.waitForTimeout(150);
     tourPlay[tp] = await page.evaluate(function () { var st = window.__ui.STEPS.filter(function (x) { return x.id === 'play'; })[0]; return { card: st.allow[0], voice: st.voice, n: window.__ui.STEPS.length, hasP: window.__ui.STEPS.some(function (x) { return x.id === 'presence'; }) }; });
@@ -258,6 +266,7 @@ function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
   await shot('28-presence-off-v02');
   var bad3 = await brokenImages(); assert(!bad3.length, 'images load (v0.3)');
 
+  console.log('Bread and Salt rendered:', JSON.stringify(BREAD_SEEN));
   assert(dragPlays > 0, 'some cards were played by drag'); console.log('UI runs: 12 + tutorial. Outcomes seen:', JSON.stringify(outcomes), '· runs saved', nRuns, '· drag plays', dragPlays);
   if (errors.length) { console.log('ERRORS:\n' + errors.join('\n')); process.exitCode = 1; } else console.log('UI CLICK-THROUGH PASSED (no console errors)');
   await browser.close();

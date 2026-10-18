@@ -7,7 +7,7 @@
  * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
  * ===================================================================== */
 var CONFIG = {
-  version: 'kit-v0.1 + rules v0.2 + v0.3.1 The Approach / build 4',
+  version: 'kit-v0.1 + rules v0.2 + v0.3.2 The Approach / build 5',
 
   // ---------- Setup ----------
   startPressure: 0,          // pressure token starts here
