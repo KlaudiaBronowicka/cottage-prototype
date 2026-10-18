@@ -1,0 +1,224 @@
+/* Headless smoke test of the rules engine + stats export.
+ * Run: node tests/smoke.js      (no installs needed)
+ * Plays thousands of seeded encounters with random and heuristic bots,
+ * checks invariants, and asserts every ending (1, 2a, 2b, 2c, 3) and both
+ * end reasons (dawn, early pressure end) are reachable without errors. */
+'use strict';
+var assert = require('assert');
+var CONFIG = require('../config.js');
+var Engine = require('../game.js');
+var Stats = require('../stats.js');
+var TXT = require('../data/vn-text.js');
+
+function pick(rng, a) { return a[rng.int(a.length)]; }
+
+function eligibleHelps(g, stat) { return ['c1', 'c2'].filter(function (w) { return g.helpEligible(w, stat).ok; }); }
+function matching(g, stat, exclude) {
+  var ic = Engine.ICON_OF_STAT[stat];
+  return g.state.hand.filter(function (id) { return id !== exclude && g.card(id).icons.indexOf(ic) >= 0; });
+}
+
+// One action by a bot. style: 'random' | 'smart' | 'reckless'
+function botStep(g, rng, style) {
+  var S = g.state;
+  if (S.phase === 'discard') { return g.discardDown(pick(rng, S.hand)); }
+  if (S.actionsLeft <= 0 || (style === 'random' && rng() < 0.08)) return g.endRound();
+  if (style === 'reckless') {
+    if (S.pov < 2) return g.move(S.pov + 1);
+    return g.endRound();
+  }
+  var options = [];
+  if (S.pov > 0) options.push(function () { return g.move(S.pov - 1); });
+  if (S.pov < 2) options.push(function () { return g.move(S.pov + 1); });
+  var commitSome = function (stat, ex) { var m = matching(g, stat, ex); return style === 'smart' ? m : m.filter(function () { return rng() < 0.5; }); };
+  var helpSome = function (stat) { var h = eligibleHelps(g, stat); return style === 'smart' ? (S.round >= 4 ? h : []) : h.filter(function () { return rng() < 0.3; }); };
+  options.push(function () { return g.investigate({ commits: commitSome('INSIGHT'), helps: helpSome('INSIGHT') }); });
+  options.push(function () { return g.steady({ commits: commitSome('CARE'), helps: helpSome('CARE') }); });
+  if (S.pov === 0) options.push(function () { return g.holdDoor({ commits: commitSome('NERVE'), helps: helpSome('NERVE') }); });
+  if (S.deck.length) options.push(function () { return g.drawAction(); });
+  S.hand.forEach(function (id) {
+    if (!g.canPlay(id).ok) return;
+    options.push(function () {
+      var c = g.card(id);
+      var p = {};
+      if (c.effect === 'investigateAnyZone') p.zone = rng.int(3);
+      if (c.effect === 'investigateAnyZone' || c.effect === 'investigateYardFromHouse') { p.commits = commitSome('INSIGHT', id); p.helps = helpSome('INSIGHT'); }
+      if (c.effect === 'readyHelp') p.helpToReady = S.helps.c1.used ? 'c1' : 'c2';
+      return g.play(id, p);
+    });
+  });
+  if (style === 'smart') {
+    // simple priorities: calm when high, bring C1 home, progress cards, else investigate yard with icons
+    var playIf = function (eff) { var id = S.hand.filter(function (x) { return g.card(x).effect === eff && g.canPlay(x).ok; })[0]; return id; };
+    var id;
+    if (S.pressure >= 3 && (id = playIf('pressure'))) return g.play(id);
+    if (S.c1 > 0 && (id = playIf('c1InwardAndCalm') || playIf('c1Home'))) return g.play(id);
+    if (S.c1 > 0 || S.pressure >= 4) return g.steady({ commits: matching(g, 'CARE'), helps: eligibleHelps(g, 'CARE') });
+    if ((id = playIf('progressObject') || playIf('progress'))) return g.play(id);
+    if (S.pov === 0 && (id = playIf('investigateYardFromHouse'))) return g.play(id, { commits: matching(g, 'INSIGHT', id), helps: eligibleHelps(g, 'INSIGHT') });
+    if ((id = playIf('investigateAnyZone'))) return g.play(id, { zone: 2, commits: matching(g, 'INSIGHT', id), helps: eligibleHelps(g, 'INSIGHT') });
+    if (S.pov === 0 && S.round < 6 && S.bars === 0 && rng() < 0.3) return g.holdDoor({ commits: matching(g, 'NERVE') });
+    return g.investigate({ commits: matching(g, 'INSIGHT'), helps: S.round >= 5 ? eligibleHelps(g, 'INSIGHT') : [] });
+  }
+  return pick(rng, options)();
+}
+
+function bestAllocation(g, rng, mode) {
+  var legal = g.legalAllocations();
+  if (mode === 'random') return pick(rng, legal);
+  legal.sort(function (a, b) { return b.length - a.length; });
+  return legal[0];
+}
+
+function playOne(seed, style, allocMode, opts) {
+  opts = opts || {};
+  var cfg = opts.cfg || CONFIG;
+  var rng = Engine.makeRng(seed ^ 0x9e3779b9);
+  var g = Engine.createGame(cfg, { seed: seed, bond: rng() < 0.5 ? 'C1' : 'C2', key: rng() < 0.5 ? 'SHARED' : 'KEPT', visited: opts.visited });
+  var S = g.state, guard = 0;
+  while (S.phase === 'actions' || S.phase === 'discard') {
+    if (++guard > 500) throw new Error('stuck seed ' + seed);
+    var before = S.actionsLeft, round = S.round;
+    var r = botStep(g, rng, style);
+    assert(r && typeof r.ok === 'boolean', 'action returns result');
+    assert(S.pressure >= cfg.pressureMin && S.pressure <= cfg.pressureMax, 'pressure in range');
+    assert(S.round <= cfg.rounds, 'round within limit');
+    assert(S.actionsLeft >= 0, 'actions non-negative');
+    if (S.phase === 'actions' && S.round !== round) assert(S.hand.length <= cfg.handLimit, 'hand limit after round end');
+    // play-or-commit-never-both: total cards conserved
+    var total = S.deck.length + S.hand.length + S.discard.length + S.removed.length;
+    assert.strictEqual(total, cfg.deck.length, 'card conservation');
+    assert(S.bars <= 1, 'max 1 Bar');
+  }
+  assert.strictEqual(S.phase, 'allocate');
+  assert(S.endReason === 'dawn' || S.endReason === 'pressure');
+  if (S.endReason === 'pressure') assert.strictEqual(S.pressure, cfg.pressureMax);
+  if (S.endReason === 'dawn') assert.strictEqual(S.roundsPlayed, cfg.rounds);
+  // invalid allocations are rejected
+  assert(!g.allocate(['T1', 'T2', 'T3', 'T3']).ok || S.progress >= 12);
+  var alloc = bestAllocation(g, rng, allocMode);
+  var res = g.allocate(alloc);
+  assert(res.ok, 'allocation ok: ' + JSON.stringify(res));
+  assert.strictEqual(S.phase, 'done');
+  var R = S.result;
+  assert(TXT.outcomes[R.outcome], 'outcome has text: ' + R.outcome);
+  R.inserts.forEach(function (k) { assert(TXT.inserts[k], 'insert text ' + k); });
+  if (R.outcome === '1') { assert.strictEqual(R.escapedTogether, 'Y'); assert.strictEqual(R.threadsResolved.length, 3); }
+  if (R.outcome === '3b') { assert.strictEqual(S.endReason, 'dawn'); assert.strictEqual(R.escapedTogether, 'Y'); assert(R.threadsResolved.length <= 1);
+    assert(R.inserts.indexOf(R.threadsResolved.length ? 'together1' : 'together0') >= 0); }
+  if (R.outcome === '3') assert(S.pressureMaxed || R.escapedTogether === 'N', 'plain Outcome 3 only for walk-out or C1 outside');
+  // bond inserts follow FINAL bond
+  assert.strictEqual(R.inserts.indexOf('bondC1') >= 0, R.finalBondC1 > 0);
+  assert.strictEqual(R.inserts.indexOf('bondC2') >= 0, R.finalBondC2 > 0);
+  assert(S.bars <= 1, 'Bars never stack');
+  if (S.pressureMaxed) { assert.strictEqual(R.outcome, '3'); assert(R.threadsResolved.length <= 1); assert.strictEqual(R.escapedTogether, 'N'); }
+  return g;
+}
+
+var outcomes = {}, ends = {}, n = 0, styles = ['random', 'smart', 'reckless'];
+var progressSum = { smart: 0, random: 0 }, cnt = { smart: 0, random: 0 };
+var store = new Stats.Store('test', null);
+for (var seed = 1; seed <= 4000; seed++) {
+  var style = styles[seed % 3];
+  var g = playOne(seed, style, seed % 2 ? 'random' : 'max');
+  n++;
+  outcomes[g.state.result.outcome] = (outcomes[g.state.result.outcome] || 0) + 1;
+  ends[g.state.endReason] = (ends[g.state.endReason] || 0) + 1;
+  if (progressSum[style] != null) { progressSum[style] += g.state.progressEarned + CONFIG.startProgress; cnt[style]++; }
+  if (seed <= 50) store.add(Stats.buildRecord(g, { runId: 'r' + seed, outcomeScene: TXT.outcomes[g.state.result.outcome].title, encounterSeconds: 0, totalSeconds: 0 }));
+}
+// faster variant: cards removed for unvisited spots
+var fastCfg = Object.assign({}, CONFIG, { fasterVariant: true });
+var gf = playOne(7, 'random', 'max', { cfg: fastCfg, visited: ['3a', '3c'] });
+assert.deepStrictEqual(gf.state.removed, ['later'], 'faster variant removes the 3b card');
+
+// determinism: same seed + same inputs = same log
+var a = playOne(42, 'random', 'max'), b = playOne(42, 'random', 'max');
+assert.deepStrictEqual(a.state.log, b.state.log, 'seeded runs are deterministic');
+
+// targeted rule checks
+(function () {
+  var g = Engine.createGame(CONFIG, { seed: 5, bond: 'C1', key: 'SHARED' });
+  var S = g.state;
+  S.pressure = 5; S.pov = 2; S.c1 = 2; S.actionsLeft = 0;
+  g.endRound();
+  assert.strictEqual(S.phase, 'allocate', 'Treeline exposure at 5 triggers early end');
+  assert.strictEqual(S.endReason, 'pressure');
+  assert(!g.allocate(['T2', 'T3']).ok, 'max 1 thread after pressure 6');
+})();
+(function () {
+  var g = Engine.createGame(CONFIG, { seed: 9, bond: 'C2', key: 'KEPT' });
+  var S = g.state;
+  S.hand = ['rule']; S.deck = S.deck.filter(function (x) { return x !== 'rule'; });
+  var p0 = S.pressure;
+  assert(g.play('rule').ok); assert.strictEqual(S.bars, 1);
+  g.endRound(); // next night should be cancelled
+  assert(S.lastEvent.cancelled, 'Bar cancels next event'); assert.strictEqual(S.bars, 0);
+  // STAR forced roll: auto-fail +1 pressure
+  var pr = S.pressure; var r = g.steady({ roll: 6 }).test;
+  assert(r.star && !r.success); assert.strictEqual(S.pressure, Math.min(6, pr + 1));
+  // tie succeeds: base 2 vs Steady 2 with roll 1 (0)
+  r = g.steady({ roll: 1 }).test; assert(r.success, 'ties succeed');
+  // help eligibility
+  S.c1 = 1; assert(!g.helpEligible('c1', 'CARE').ok, 'C1 help only in House');
+  assert(!g.helpEligible('c2', 'CARE').ok, 'C2 help not for CARE');
+  assert.strictEqual(g.helpBonus('c2'), CONFIG.helpBonusBonded, 'bonded help +3');
+})();
+
+// RULED: Bars don't stack
+(function () {
+  var g = Engine.createGame(CONFIG, { seed: 11 }); var S = g.state;
+  S.hand = ['rule', 'kompot']; S.deck = S.deck.filter(function (x) { return S.hand.indexOf(x) < 0; }); S.pov = 0; S.actionsLeft = 2;
+  S.bars = 1;
+  assert(!g.canPlay('rule').ok, "Mother's Rule blocked while a Bar is down");
+  var r = g.holdDoor({}); assert(!r.ok && /stack/.test(r.error), 'Hold the door blocked while a Bar is down');
+  assert.strictEqual(S.actionsLeft, 2, 'blocked action costs nothing');
+})();
+// RULED: Photos (House only, Yard) and Key (any zone -> any zone) cost 1 action incl. the test
+(function () {
+  var g = Engine.createGame(CONFIG, { seed: 12 }); var S = g.state;
+  S.hand = ['photos', 'key']; S.deck = S.deck.filter(function (x) { return S.hand.indexOf(x) < 0; });
+  S.pov = 1; S.actionsLeft = 2;
+  assert(!g.canPlay('photos').ok, 'Photos needs the House');
+  var r = g.play('key', { zone: 0, roll: 5 }); assert(r.ok && r.test, 'Key from the Yard on the House');
+  assert.strictEqual(r.test.difficulty, CONFIG.zones[0].investigateDifficulty); assert.strictEqual(S.actionsLeft, 1, 'Key = 1 action total');
+  S.pov = 0; var p = S.progress;
+  r = g.play('photos', { roll: 5 }); assert(r.ok && r.test.difficulty === CONFIG.zones[1].investigateDifficulty, 'Photos investigates the Yard');
+  assert.strictEqual(S.actionsLeft, 0, 'Photos = 1 action total');
+  if (r.test.success) assert(S.progress >= p + CONFIG.zones[1].progress);
+})();
+// RULED: final bond drives inserts; Outcome 3b at dawn with 0-1 Threads and escaped Y
+(function () {
+  var g = Engine.createGame(CONFIG, { seed: 13, bond: 'C2', key: 'KEPT' }); var S = g.state;
+  S.phase = 'allocate'; S.endReason = 'dawn'; S.c1 = 0; S.c1BroughtBack = true; S.progress = 2; S.pressure = 4;
+  var R = g.allocate(['T3']).result;
+  assert.strictEqual(R.outcome, '3b'); assert.strictEqual(R.finalBondC1, 1); assert.strictEqual(R.finalBondC2, 1);
+  assert.deepStrictEqual(R.inserts, ['together1', 'together1_T3', 'bondC1', 'bondC2', 'kept', 'highPressure']);
+  var g2 = Engine.createGame(CONFIG, { seed: 14, bond: 'C1', key: 'SHARED' }); var S2 = g2.state;
+  S2.phase = 'allocate'; S2.endReason = 'dawn'; S2.c1 = 1; S2.progress = 0;
+  var R2 = g2.allocate([]).result;
+  assert.strictEqual(R2.outcome, '3', 'C1 outside at dawn -> plain Outcome 3'); assert.strictEqual(R2.finalBondC1, 0);
+  assert(R2.inserts.indexOf('bondC1') < 0, 'Beat 4 +1 cancelled by encounter -1 -> no bond insert');
+  var g3 = Engine.createGame(CONFIG, { seed: 15, bond: 'C1' }); g3.state.phase = 'allocate'; g3.state.endReason = 'dawn'; g3.state.c1 = 0;
+  assert.deepStrictEqual(g3.allocate([]).result.inserts.slice(0, 1), ['together0']);
+})();
+
+// stats export
+var runs = store.all();
+var KIT_FIELDS = ['progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice', 'outcome', 'outcomeScene', 'roundsPlayed', 'plays', 'commits', 'playsVsCommits'];
+runs.forEach(function (r) {
+  Stats.COLUMNS.forEach(function (c) { assert(r[c] !== undefined, 'stats field present: ' + c); });
+  KIT_FIELDS.forEach(function (c) { assert(Stats.COLUMNS.indexOf(c) >= 0, 'kit field in CSV: ' + c); });
+  assert(r.outcomeScene, 'outcome scene recorded');
+});
+var csv = Stats.toCSV(runs), json = JSON.parse(Stats.toJSON(runs));
+assert.strictEqual(csv.trim().split('\n').length, runs.length + 1, 'csv rows');
+assert.strictEqual(json.runs.length, 50);
+
+console.log('Played ' + n + ' encounters without errors.');
+console.log('Outcomes:', JSON.stringify(outcomes));
+console.log('End reasons:', JSON.stringify(ends));
+console.log('Mean final progress (start + earned): smart ' + (progressSum.smart / cnt.smart).toFixed(2) + ', random ' + (progressSum.random / cnt.random).toFixed(2));
+['1', '2a', '2b', '2c', '3', '3b'].forEach(function (o) { assert(outcomes[o] > 0, 'outcome ' + o + ' reachable'); });
+assert(ends.dawn > 0 && ends.pressure > 0, 'both end reasons reachable');
+console.log('ALL SMOKE CHECKS PASSED');

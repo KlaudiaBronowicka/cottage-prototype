@@ -1,0 +1,1335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Cottage — encounter prototype (greybox)</title>
+<style>
+/* Greybox only. No art, no brand. */
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: #2b2b2b; color: #e6e6e6; }
+button { font: inherit; background: #555; color: #eee; border: 1px solid #777; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+button:hover:not(:disabled) { background: #666; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.primary { background: #8a8a8a; color: #111; border-color: #aaa; font-weight: 600; }
+input, select { font: inherit; background: #444; color: #eee; border: 1px solid #777; border-radius: 4px; padding: 4px 6px; }
+#topbar { display: flex; gap: 8px; align-items: center; padding: 6px 12px; background: #1d1d1d; border-bottom: 1px solid #444; position: sticky; top: 0; z-index: 5; }
+#topbar .brand { font-weight: 700; letter-spacing: .05em; }
+.spacer { flex: 1; }
+.muted { color: #999; font-size: 13px; }
+.hidden { display: none !important; }
+#app { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.panel { background: #383838; border: 1px solid #555; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+h1, h2, h3 { margin: .2em 0 .5em; font-weight: 600; }
+h3 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: #bbb; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.col { flex: 1; min-width: 240px; }
+/* VN */
+.vn { min-height: 260px; display: flex; flex-direction: column; justify-content: flex-end; background: repeating-linear-gradient(45deg,#333,#333 12px,#363636 12px,#363636 24px); border-radius: 6px; padding: 16px; }
+.vn .scene { color: #aaa; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+.vn .box { background: #1f1f1fee; border: 1px solid #666; border-radius: 6px; padding: 14px 16px; margin-top: 8px; }
+.vn .who { font-weight: 700; margin-bottom: 4px; }
+.vn .narr { font-style: italic; color: #ccc; }
+.vn .choices button { display: block; width: 100%; text-align: left; margin-top: 6px; }
+.vn .nav { margin-top: 10px; display: flex; gap: 8px; justify-content: flex-end; }
+/* Encounter */
+.track { display: flex; gap: 4px; }
+.track span { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #777; border-radius: 4px; background: #2e2e2e; }
+.track span.on { background: #bbb; color: #111; font-weight: 700; }
+.track span.max { border-color: #c66; }
+.stat { display: inline-block; margin-right: 18px; }
+.stat b { font-size: 20px; }
+.zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.zone { border: 1px dashed #777; border-radius: 6px; padding: 8px; min-height: 110px; background: #303030; }
+.zone.here { border-style: solid; border-color: #ddd; }
+.zone .tok { display: inline-block; padding: 2px 6px; margin: 2px; border-radius: 10px; background: #666; font-size: 12px; }
+.zone .tok.pov { background: #ddd; color: #111; }
+.zone .tok.c1 { background: #999; color: #111; }
+.cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.card { width: 170px; min-height: 150px; border: 1px solid #888; border-radius: 6px; background: #444; padding: 8px; display: flex; flex-direction: column; font-size: 13px; }
+.card .nm { font-weight: 700; }
+.card .ic { margin: 2px 0 4px; letter-spacing: 2px; }
+.card .fx { flex: 1; }
+.card .fl { color: #aaa; font-style: italic; font-size: 12px; margin: 4px 0; }
+.card.sel { outline: 3px solid #ddd; }
+.icon { display: inline-block; min-width: 18px; padding: 0 4px; border: 1px solid #aaa; border-radius: 3px; font-size: 11px; text-align: center; margin-right: 2px; }
+.actions button { margin: 2px 4px 2px 0; }
+.thread { border: 1px solid #666; border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+.thread.on { border-color: #ddd; background: #474747; }
+.result { font-family: ui-monospace, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
+.good { color: #b8e0b8; } .bad { color: #e8b0b0; } .warn { color: #e8d8a0; }
+.event { border-left: 4px solid #aaa; padding-left: 10px; }
+/* Debug */
+#debug { position: fixed; right: 0; bottom: 0; width: 420px; max-height: 60vh; overflow: auto; background: #111e; border: 1px solid #555; font: 12px/1.35 ui-monospace, Menlo, monospace; padding: 8px; z-index: 6; }
+#debug .log div { border-bottom: 1px dotted #333; }
+#debug .log .round { color: #fff; font-weight: 700; }
+#debug .log .event { color: #e8d8a0; border: 0; padding: 0; }
+#debug .log .end { color: #9cf; font-weight: 700; }
+/* Overlay */
+#overlay { position: fixed; inset: 0; background: #000a; display: grid; place-items: center; z-index: 10; }
+#overlayBox { background: #3a3a3a; border: 1px solid #777; border-radius: 8px; padding: 16px; width: min(900px, 94vw); max-height: 88vh; overflow: auto; }
+table { border-collapse: collapse; font-size: 12px; }
+td, th { border: 1px solid #555; padding: 3px 6px; text-align: left; }
+textarea { width: 100%; height: 140px; background: #222; color: #ddd; font: 12px ui-monospace, monospace; }
+.dir { font-style: italic; color: #bbb; }
+
+</style>
+</head>
+<body>
+<header id="topbar">
+  <span class="brand">THE COTTAGE · greybox prototype</span>
+  <span id="seedLabel" class="muted"></span>
+  <span class="spacer"></span>
+  <button id="btnRules" title="Quick rules">Rules</button>
+  <button id="btnStats" title="Run stats (saved in this browser)">Stats</button>
+  <button id="btnDebug" title="Toggle debug panel (key: D)">Debug</button>
+  <button id="btnRestart" title="Back to the start">Restart</button>
+</header>
+<main id="app"></main>
+<aside id="debug" class="hidden"></aside>
+<div id="overlay" class="hidden"><div id="overlayBox"></div></div>
+<!-- load order: tuning, text, engine, stats, UI -->
+<script>
+/* =====================================================================
+ * config.js  —  ALL TUNING NUMBERS FOR THE COTTAGE ENCOUNTER PROTOTYPE
+ * ---------------------------------------------------------------------
+ * Source: "Cottage Paper Prototype Kit v0.1" (Game Designer, 18 Oct 2026).
+ * Every value marked [T] in the kit is tunable here. Edit, save, reload.
+ * Nothing else in the code holds a gameplay number.
+ * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
+ * ===================================================================== */
+var CONFIG = {
+  version: 'kit-v0.1 / build 1',
+
+  // ---------- Setup ----------
+  startPressure: 0,          // pressure token starts here
+  startProgress: 1,          // [T] "what you learned during the day"
+  startingHand: 5,           // [T] cards drawn at setup
+  handLimit: 6,              // hand limit, checked at END of round (discard down)
+  rounds: 6,                 // [T] DAWN after this many rounds
+  actionsPerRound: 2,        // actions per round (repeats allowed)
+  allowPass: true,           // RULED (Kostka 2026-10-18): actions are optional; the player may end the round with actions unspent
+
+  // ---------- Pressure ----------
+  pressureMax: 6,            // [T] reaching this ends the encounter immediately (COMPANION 1 walks out)
+  pressureMin: 0,            // RULED (Kostka 2026-10-18): pressure floor 0 (track is 0-6) — confirmed
+  exposurePOV: 1,            // [T] END: +pressure if the POV ends the round in the Treeline
+  exposureC1: 1,             // [T] END: +pressure if COMPANION 1 ends the round in the Treeline
+  highPressureInsert: [4, 5],// outcome insert "nobody slept" shows for final pressure in this range
+
+  // ---------- Zones (order matters: index 0 = House, outward = higher index) ----------
+  zones: [
+    { id: 'house',    name: 'House',    investigateDifficulty: 2, progress: 1 }, // [T]
+    { id: 'yard',     name: 'Yard',     investigateDifficulty: 3, progress: 2 }, // [T]
+    { id: 'treeline', name: 'Treeline', investigateDifficulty: 4, progress: 3 }  // [T]
+  ],
+  holdDoorZone: 'house',     // Hold the door works only here
+
+  // ---------- Tests ----------
+  testBase: 2,               // [T] base value of every test
+  steadyDifficulty: 2,       // [T] CARE test
+  holdDoorDifficulty: 3,     // [T] NERVE test
+  strongMargin: 3,           // [T] strong success if total >= difficulty + this
+  strongInvestigateBonus: 1, // strong Investigate: +progress
+  strongSteadyBonus: 1,      // strong Steady: extra -pressure
+  starPressure: 1,           // STAR token: automatic fail and +this pressure
+  // Test bag = d6. Index 0 is a roll of 1. Value 'STAR' = auto-fail. [T]
+  testBag: [0, 0, 0, -1, +1, 'STAR'],
+  steadyPressureRelief: 1,   // Steady success: pressure -this (and COMPANION 1 one zone toward House)
+
+  // ---------- Bars ----------
+  barsStack: false,          // RULED (Kostka 2026-10-18): Bars do NOT stack — max 1 Bar on the board; Hold the door / Mother's Rule are greyed out while one is down
+
+  // ---------- Companion Help (each usable once; Burnt Pierogi readies one) ----------
+  helpBonus: 2,              // [T] +2 to a test
+  helpBonusBonded: 3,        // [T] +3 if her bond rose in Beat 4
+  helps: {
+    c1: { stats: ['CARE'],            onlyInHouse: true  },  // COMPANION 1: CARE tests, only while she is in the House
+    c2: { stats: ['INSIGHT', 'NERVE'], onlyInHouse: false } // COMPANION 2: INSIGHT or NERVE tests
+  },
+  allowBothHelpsOnOneTest: true, // RULED (Kostka 2026-10-18): confirmed (Help follows the cards, so the two never share a stat anyway)
+
+  // ---------- Bond change (flag out) ----------
+  c1BondPlusIfBroughtBackAndHome: 1,  // [T] +1 if you moved her toward the House at least once AND she ends in the House
+  c1BondMinusIfOutside: -1,           // [T] -1 if she ends outside the House
+
+  // ---------- Threads (spend progress at the end, full cost each) ----------
+  threads: [
+    { id: 'T1', name: 'The Being',     cost: 3 },  // owner: the BEING
+    { id: 'T2', name: 'The Companion', cost: 4 },  // owner: COMPANION 1
+    { id: 'T3', name: 'The Past',      cost: 2 }   // owner: the POV, through the OBJECT
+  ],
+  maxThreadsIfPressureMaxed: 1,      // if pressure reached max you may resolve at most this many
+  allThreadsNeedEscapedTogether: true,
+
+  // ---------- Player deck (12 cards, fixed; no reshuffle when empty) ----------
+  // icons: I = INSIGHT, N = NERVE, C = CARE. Committing gives +1 per matching icon.
+  // effect: key handled in game.js; value = effect amount where relevant.
+  deck: [
+    { id: 'photos',   name: 'Footprint Photos',  icons: ['I','I'], effect: 'investigateYardFromHouse', text: 'Investigate the Yard without leaving the House.', flavour: "{C2}'s photos, zoomed in until they are all pixels." },
+    { id: 'rule',     name: "Mother's Rule",     icons: ['N'],     effect: 'placeBar',          text: 'Place a Bar: cancel the next Night event.', flavour: '"Shut the gate after dark. Because I said so."', beat3: '3a' },
+    { id: 'object',   name: 'The Object',        icons: ['I'],     effect: 'progressObject', value: 1, valueShared: 2, text: 'Gain 1 progress. If key choice = SHARED, gain 2 instead.', flavour: 'Family handwriting, naming this exact cottage.', beat3: '3c' },
+    { id: 'torch',    name: 'Torch',             icons: ['I','N'], effect: 'torch', value: 1,   text: 'Your next Investigate this round is 1 difficulty easier.', flavour: 'The beam stops exactly where the trees begin.' },
+    { id: 'blanket',  name: 'Thick Blanket',     icons: ['C','C'], effect: 'c1Home',            text: '{C1} returns to the House.', flavour: 'The {HOST} brought the thick one. Wrap her in it.' },
+    { id: 'kompot',   name: 'Kompot',            icons: ['C'],     effect: 'pressure', value: -1, text: 'Pressure -1.', flavour: '"For the guests. Don\'t waste it."' },
+    { id: 'story',    name: "The Host's Story",  icons: ['I','N'], effect: 'progress', value: 1, text: 'Gain 1 progress.', flavour: '"Something walks round a house to keep it. Or to be let in."' },
+    { id: 'phone',    name: 'Phone at 4%',       icons: ['I'],     effect: 'draw', value: 2,    text: 'Draw 2 cards.', flavour: "One bar of signal. One message you shouldn't read." },
+    { id: 'pierogi',  name: 'Burnt Pierogi',     icons: ['C','N'], effect: 'readyHelp',         text: "One companion's used Help becomes ready again.", flavour: 'Slightly burned. Still the best thing tonight.' },
+    { id: 'key',      name: 'Key on a String',   icons: ['N'],     effect: 'investigateAnyZone', text: 'Investigate any zone without moving there.', flavour: "The {HOST}'s key, warm from your pocket." },
+    { id: 'stove',    name: 'Stove Fire',        icons: ['N','C'], effect: 'pressure', value: -2, text: 'Pressure -2.', flavour: 'Feed it. Keep it ticking. Keep it bright.' },
+    { id: 'later',    name: '"Later, Properly"', icons: ['C','I'], effect: 'c1InwardAndCalm', value: -1, text: 'No test: {C1} moves one zone toward the House and pressure -1.', flavour: '"Can I tell you later? Properly. Not here."', beat3: '3b' }
+  ],
+  // RULED (Kostka 2026-10-18): Footprint Photos = 1 action total incl. its Investigate test; POV must be in the House; investigates the Yard.
+  //   Key on a String = 1 action total incl. its test; usable from any zone, on any zone (no setting needed).
+  photosRequiresHouse: true,
+  // RULED (Kostka 2026-10-18): Burnt Pierogi can't be played while no Help has been used (confirmed).
+  pierogiNeedsUsedHelp: true,
+
+  // ---------- Night events (8; one flipped per round, so 6 of 8 seen) ----------
+  // pressure: change; c1Out: COMPANION 1 moves outward this many zones; discardRandom: cards;
+  // onlyIfPOVOutside: effect only if POV is not in the House; noEndDraw: skip end-of-round draw.
+  events: [
+    { id: 'footsteps', name: 'Footsteps',          pressure: 1 },
+    { id: 'voice',     name: 'The Voice',          pressure: 1, c1Out: 1 },
+    { id: 'lights',    name: 'The Lights Fail',    pressure: 1, discardRandom: 1 },
+    { id: 'gate',      name: 'The Gate Creaks',    pressure: 1, onlyIfPOVOutside: true },
+    { id: 'message',   name: 'Message: No Sender', pressure: 1, c1Out: 1 },
+    { id: 'silence',   name: 'Silence',            pressure: 1, noEndDraw: true },
+    { id: 'handle',    name: 'The Door Handle',    pressure: 2 },
+    { id: 'voice2',    name: 'The Voice, Again',   pressure: 1, c1Out: 1 }
+  ],
+
+  // ---------- VN-side options ----------
+  // Faster VN variant: visit only 2 of the 3 Beat 3 spots; the skipped spot's card is removed from the deck.
+  fasterVariant: false,
+  beat3SpotsToVisit: 2,      // used only when fasterVariant = true
+
+  // ---------- Prototype / tooling ----------
+  // RULED (Kostka 2026-10-18): Outcome 3 from DAWN with 0-1 Threads and Escaped together = Y uses the 'stayed together, little learned'
+  //   variant 'Outcome 3b · Dawn, Together' (outcome code '3b'; Narrative Writer's text in data/vn-text.js).
+  outcome3StayedVariant: true,
+
+  defaultSkin: 'neutral',    // name set from data/vn-text.js: 'neutral' (CAPS slots), 'A', 'B', 'C'. URL ?skin=A overrides.
+  statsStorageKey: 'cottageProto.runs.v1'
+};
+if (typeof module !== 'undefined') module.exports = CONFIG;
+
+</script>
+<script>
+/* =====================================================================
+ * data/vn-text.js — PLACEHOLDER VN TEXT (Narrative Writer's, trimmed)
+ * ---------------------------------------------------------------------
+ * Source: "Cottage Encounter — Paper Prototype Outline" + kit section 4.
+ * Swap any line freely. Tokens {POV} {C1} {C2} {HOST} {BEING} {OBJECT}
+ * are replaced from the active name set in SKINS (URL ?skin=A|B|C).
+ * Line format:  { who: 'C1', text: '...' }   (who = slot key or null for narration)
+ *               { narr: '...' }               (stage direction / narration)
+ * ===================================================================== */
+var VN_TEXT = {
+  SKINS: {
+    neutral: { POV: 'POV', C1: 'COMPANION 1', C2: 'COMPANION 2', HOST: 'HOST', BEING: 'the BEING', OBJECT: 'the OBJECT' },
+    A: { POV: 'Hania', C1: 'Ola',    C2: 'Kinga', HOST: 'Wanda',     BEING: 'the domowik', OBJECT: "Irena's address book" },
+    B: { POV: 'Ewa',   C1: 'Marta',  C2: 'Iga',   HOST: 'the landlady', BEING: 'the zmora', OBJECT: "Julia's photo" },
+    C: { POV: 'Agata', C1: 'Dorota', C2: 'Lena',  HOST: 'the caretaker', BEING: 'the Licho', OBJECT: "Leokadia's notebook" }
+  },
+
+  title: 'The Cottage — encounter prototype',
+  subtitle: 'Greybox playtest build. Placeholder text. Nothing is final.',
+
+  // ---------- INTRO (short VN before the encounter) ----------
+  intro: [
+    { scene: 'Beat 1 · Arrival (evening)', lines: [
+      { narr: 'Gravel under the tyres. A low whitewashed cottage, a crooked fence, the treeline black behind it. The {HOST} waits at the gate with a key on a string.' },
+      { who: 'HOST', text: 'Dzień dobry, girls. You found it. Most people drive past twice.' },
+      { who: 'C2',   text: 'We drove past three times. She refused to trust the map.' },
+      { who: 'HOST', text: "One bed or two in the big room? I don't ask questions, I just count pillows." },
+      { who: 'C2',   text: 'Two pillows. One bed. She steals the blanket either way.' },
+      { who: 'HOST', text: 'Then I bring the thick one. One thing. Shut the gate after dark. Because I said so, and because my mother said so.' },
+      { who: 'C1',   text: '(quietly, to her phone) Not now. ... Work. Always work. Pass the kompot.' }
+    ]},
+    { scene: 'Beat 2 · The footprints (morning)', lines: [
+      { who: 'C2', text: 'Footprints. All the way round the house. Nothing comes in. Nothing goes out. They just... go round.' },
+      { who: 'C1', text: 'I heard it. Around three. I thought it was one of you. Then I counted, and you were both asleep.' }
+    ]},
+    { scene: 'Beat 3 · Day', spots: true }, // the three spots below are shown here
+    { scene: 'Beat 4 · Evening', lines: [
+      { narr: 'Dinner. Pierogi from the village shop, burned slightly. Rain on the window. The fire in the stove ticks.' },
+      { who: 'C2', text: 'Rule for tonight: nobody goes out. Nobody opens the door.' }
+    ], choices: ['bond', 'key'] },
+    { scene: 'Night two', lines: [
+      { narr: "Late. The lights flicker and fail. Footsteps outside, slow, circling. Then a voice from the yard — the {POV}'s own voice — calling {C1} by name." },
+      { who: 'C1',  text: "(already on her feet) That's you. That's your voice." },
+      { who: 'POV', text: "I'm right here. I'm right here. Don't open the door." }
+    ]}
+  ],
+
+  spots: {
+    '3a': { label: 'The {HOST} in her garden (sets up T1, the Being)', lines: [
+      { who: 'POV',  text: 'Pani, there are footprints round the cottage.' },
+      { who: 'HOST', text: 'Then they belong to the house, not to the road. Something walks round a house to keep it. Or to be let in.' }
+    ]},
+    '3b': { label: '{C1} at the treeline (sets up T2, her secret)', lines: [
+      { who: 'C1', text: "Can I tell you later? Properly. Not here. ... I'm good at carrying things." },
+      { narr: 'She looks past the {POV} into the trees, as if she heard her name.' }
+    ]},
+    '3c': { label: '{OBJECT} (sets up T3, the past)', lines: [
+      { narr: 'The {OBJECT}: this cottage is in it. The village, the lane, the crooked fence.' },
+      { who: 'POV', text: '(to herself) You were here. Why were you here?' }
+    ]}
+  },
+
+  choices: {
+    bond: { prompt: 'After dinner, who does the {POV} sit with?', options: [
+      { value: 'C1', label: 'Sit with {C1} on the step.', after: 'She leans her head on your shoulder. "Thanks for not pushing."' },
+      { value: 'C2', label: 'Wash up with {C2}.',        after: 'She flicks water at you. "You\'re worried about her too."' }
+    ]},
+    key: { prompt: 'What does the {POV} do with {OBJECT}?', options: [
+      { value: 'SHARED', label: 'Share it: "This place is in here. I don\'t know why."' },
+      { value: 'KEPT',   label: 'Keep it: "Nothing. Long day."' }
+    ]}
+  },
+
+  // ---------- ENCOUNTER flavour ----------
+  encounterGoal: 'Hold together until dawn and learn as much as you can.',
+  pressureBands: [
+    { min: 0, max: 1, text: 'Footsteps circling; the stove ticks; jokes still work.' },
+    { min: 2, max: 3, text: 'The lights fail; the voice calls {C1} by name.' },
+    { min: 4, max: 5, text: 'Something tries the handle; {C1} at the window, hand on the latch.' },
+    { min: 6, max: 6, text: '{C1} is outside. The encounter ends.' }
+  ],
+  events: {
+    footsteps: 'Slow, under the bedroom window.',
+    voice:     "The {POV}'s own voice calls {C1} by name.",
+    lights:    'The bulb hums, then dies.',
+    gate:      'It opens on its own.',
+    message:   "{C1}'s phone buzzes. No sender.",
+    silence:   'Total silence. Worse than the footsteps.',
+    handle:    'Something tries it. Slowly.',
+    voice2:    'Closer now. Kinder.'
+  },
+  helpLines: { c1: "\"I'm here. I'm not going anywhere.\"", c2: '"Rule for tonight: nobody goes out."' },
+  threads: {
+    T1: 'What circles the house, and does it want to keep the house or be let in?',
+    T2: 'Why did {C1} nearly go outside, and what is she hiding?',
+    T3: 'Why does {OBJECT} name this cottage, and who was here before?'
+  },
+  earlyEnd: '{C1} walks out into the dark. The door swings on its hinge.',
+  dawn: 'Grey light. Birdsong. Dawn.',
+
+  // ---------- OUTRO (outcome scenes + inserts) ----------
+  outcomes: {
+    '1':  { title: 'Outcome 1 · Full success', lines: [
+      { narr: 'Dawn. Birdsong. The footprints have stopped at the door, as if something sat down there to rest.' },
+      { who: 'C1',   text: 'I owe you both the truth. All of it.' },
+      { who: 'C2',   text: "That's it? You've been carrying that since Warsaw? Come here." },
+      { who: 'HOST', text: "(at breakfast, looking at {OBJECT}) I knew that hand the moment I saw it. Sit. It's a long story, and a good one." },
+      { who: 'POV',  text: 'I think I know why we came here now.' }
+    ]},
+    '2a': { title: 'Outcome 2a · Mixed — T3 open', lines: [
+      { narr: 'Dawn. The thing round the house is understood, and {C1} has finally said it out loud.' },
+      { who: 'C1',   text: 'Thank you for not letting me go out there. And for listening.' },
+      { who: 'HOST', text: '(seeing {OBJECT}, her face closes) Where did you get that? Eat your breakfast. You have a long drive.' },
+      { who: 'C2',   text: '(in the car) She knows something about that page.' },
+      { who: 'POV',  text: "Next time. I'll ask next time." }
+    ]},
+    '2b': { title: 'Outcome 2b · Mixed — T2 open', lines: [
+      { narr: 'Dawn. The {HOST} tells the story behind {OBJECT} over coffee, and the footprints make sense now.' },
+      { who: 'POV', text: '(to {C1}) Last night. The voice. Do you want to talk about it?' },
+      { who: 'C1',  text: '(bright smile) I want to talk about how good this coffee is.' },
+      { who: 'C2',  text: "(quietly) She'll tell us. Give her time." },
+      { narr: 'In the car, {C1} puts her headphones in and watches the trees.' }
+    ]},
+    '2c': { title: 'Outcome 2c · Mixed — T1 open', lines: [
+      { narr: 'Dawn. {C1} told them everything in the dark, and the {HOST} has explained {OBJECT}. But outside...' },
+      { who: 'C2',   text: 'Um. Guys. Come and look at the car.' },
+      { narr: 'Footprints round the house — and for the first time a single line of them leading to the car, stopping at the boot.' },
+      { who: 'HOST', text: 'Shut the gate behind you when you go. Not that it will help now.' },
+      { who: 'C1',   text: 'Together this time.' }
+    ]},
+    '3':  { title: 'Outcome 3 · Failure that continues', lines: [
+      { narr: 'The door was open. {C1} was gone. They find her at dawn at the treeline, barefoot, cold, unhurt, with no memory of walking out.' },
+      { who: 'C1',   text: "I heard you calling. It was your voice. I'm sorry." },
+      { who: 'POV',  text: "Don't. You're here." },
+      { who: 'C2',   text: "We're leaving. Now." },
+      { who: 'HOST', text: "(at the gate, older than yesterday) Go on. It'll still be here when you're ready to understand it." }
+    ]},
+    // RULED (Kostka 2026-10-18): Outcome 3b is used when DAWN is reached with 0-1 Threads and Escaped together = Y.
+    // Text: Narrative Writer (Bajka), supplied 2026-10-18 (also in section 5 of the outline page). [Brackets] render in italics.
+    '3b': { title: 'Outcome 3b · Dawn, Together (variant)', lines: [
+      { narr: '[Grey light. All three of them are on the kitchen floor in blankets, backs against the cold stove, {C1} in the middle holding both their hands. The door is still shut.]' },
+      { who: 'C1',   text: "We're all here. [beat] We're all here, right?" },
+      { who: 'POV',  text: 'All here. [She counts anyway.] One, two, three.' },
+      { who: 'C2',   text: '[at the window] The footprints are back. More of them. Closer to the door.' },
+      { who: 'HOST', text: "[at the gate with fresh bread, studying their faces] You kept the door shut. Good. [beat] That's all you did, isn't it?" },
+      { narr: "[In the car {OBJECT} sits on the {POV}'s lap. Nobody can say what walked round the house, or why it wanted {C1}. But nobody is missing.]" }
+    ]}
+  },
+  inserts: {
+    // Outcome 3b only (Bajka): exactly one of together1 / together0, plus the line for the one resolved Thread.
+    together1:    [{ who: 'C2', text: 'Well. We got one answer.' }, { who: 'POV', text: 'One.' }],
+    together1_T1: [{ narr: '[They know what circled the house, but not why it wanted {C1}.]' }],
+    together1_T2: [{ narr: '[{C1} told them her secret in the dark, but nobody knows what was outside.]' }],
+    together1_T3: [{ narr: "[The {HOST} explains {OBJECT}'s page over breakfast, but won't talk about the night.]" }],
+    together0:    [{ who: 'C1', text: "So we don't know anything." }, { who: 'C2', text: "We know we're bad at sleeping." }, { narr: '[Nobody laughs, then everybody does.]' }],
+    escapedN:     [{ narr: '{C1} has mud on her feet and won\'t say how far she got.' }, { who: 'C1', text: "I'm fine. I came back, didn't I?" }],
+    bondC1:       [{ who: 'C1', text: 'You held on to me. I felt it.' }],
+    bondC2:       [{ who: 'C2', text: "Good teamwork. Don't tell anyone I said something nice." }],
+    shared:       [{ who: 'C2', text: 'Thanks for showing us the page. It helped, knowing.' }],
+    kept:         [{ narr: "{OBJECT} is heavy in the {POV}'s bag. Nobody else knows it's there." }],
+    highPressure: [{ narr: 'Nobody slept. The door handle has scratches nobody wants to talk about.' }]
+  }
+};
+if (typeof module !== 'undefined') module.exports = VN_TEXT;
+
+</script>
+<script>
+/* =====================================================================
+ * game.js — pure encounter rules engine (no DOM). Runs in browser + node.
+ * Implements "Cottage Paper Prototype Kit v0.1" rules. Numbers: config.js
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+
+  // ---------- Seeded RNG (mulberry32) ----------
+  function makeRng(seed) {
+    var s = seed >>> 0;
+    var rng = function () {
+      s = (s + 0x6D2B79F5) >>> 0;
+      var t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    rng.int = function (n) { return Math.floor(rng() * n); };
+    rng.shuffle = function (arr) {
+      for (var i = arr.length - 1; i > 0; i--) { var j = rng.int(i + 1); var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+      return arr;
+    };
+    return rng;
+  }
+
+  var STAT_OF_ICON = { I: 'INSIGHT', N: 'NERVE', C: 'CARE' };
+  var ICON_OF_STAT = { INSIGHT: 'I', NERVE: 'N', CARE: 'C' };
+
+  /**
+   * createGame(cfg, opts)
+   *  opts.seed        integer seed
+   *  opts.bond        'C1' | 'C2'          (Beat 4 choice 1)
+   *  opts.key         'SHARED' | 'KEPT'    (Beat 4 choice 2)
+   *  opts.visited     ['3a','3b','3c']     (Beat 3 spots; faster variant removes unvisited cards)
+   */
+  function createGame(cfg, opts) {
+    opts = opts || {};
+    var seed = (opts.seed == null ? Math.floor(Math.random() * 1e9) : opts.seed) >>> 0;
+    var rng = makeRng(seed);
+    var zoneIds = cfg.zones.map(function (z) { return z.id; });
+    var now = opts.now || function () { return Date.now(); }; // injectable clock (tests)
+
+    var S = {
+      seed: seed,
+      round: 0,
+      phase: 'setup',          // setup | actions | discard | allocate | done
+      actionsLeft: 0,
+      pressure: cfg.startPressure,
+      maxPressureSeen: cfg.startPressure,
+      pressureMaxed: false,
+      progress: cfg.startProgress,
+      progressEarned: 0,
+      pov: 0, c1: 0,           // zone index (0 = House). COMPANION 2 always in House.
+      povLeftHouse: false, c1EverOutside: false, roundStartedAt: [], endedAt: null,
+      c1BroughtBack: false,
+      deck: [], hand: [], discard: [], removed: [],
+      events: [], eventsSeen: [],
+      bars: 0,
+      torch: 0,                // difficulty reduction for next Investigate this round
+      silence: false,
+      helps: { c1: { used: false, uses: 0 }, c2: { used: false, uses: 0 } },
+      flags: { bond: opts.bond || 'C1', key: opts.key || 'SHARED', visited: opts.visited || ['3a', '3b', '3c'] },
+      stats: { plays: 0, commits: 0, tests: 0, testSuccesses: 0, stars: 0, actions: {}, cardsPlayed: [], cardsCommitted: [], pressureByRound: [], progressByRound: [] },
+      endReason: null,         // 'dawn' | 'pressure'
+      roundsPlayed: 0,
+      resolved: [],
+      outcome: null,
+      result: null,
+      lastTest: null,
+      log: []
+    };
+
+    function log(msg, kind) { S.log.push({ round: S.round, kind: kind || 'info', text: msg }); }
+    function card(id) { for (var i = 0; i < cfg.deck.length; i++) if (cfg.deck[i].id === id) return cfg.deck[i]; return null; }
+    function zoneName(i) { return cfg.zones[i].name; }
+    function ended() { return S.phase === 'allocate' || S.phase === 'done'; }
+
+    function changePressure(delta, why) {
+      if (ended() || !delta) return;
+      var before = S.pressure;
+      S.pressure = Math.max(cfg.pressureMin, Math.min(cfg.pressureMax, S.pressure + delta));
+      S.maxPressureSeen = Math.max(S.maxPressureSeen, S.pressure);
+      log('Pressure ' + before + ' → ' + S.pressure + ' (' + why + ')', delta > 0 ? 'bad' : 'good');
+      if (S.pressure >= cfg.pressureMax) earlyEnd();
+    }
+    function earlyEnd() {
+      S.pressureMaxed = true;
+      S.endReason = 'pressure';
+      S.roundsPlayed = S.round;
+      S.c1 = zoneIds.length - 1; S.c1EverOutside = true; // narrative: COMPANION 1 walks out (confirmed: bond -1, escaped N)
+      log('EARLY END: pressure reached ' + cfg.pressureMax + '. COMPANION 1 walks out.', 'end');
+      enterAllocate();
+    }
+    function enterAllocate() { S.endedAt = now(); S.phase = 'allocate'; S.actionsLeft = 0; snapshotRound(); }
+    function snapshotRound() { S.stats.pressureByRound.push(S.pressure); S.stats.progressByRound.push(S.progress); }
+
+    function drawCards(n, why) {
+      var got = 0;
+      for (var i = 0; i < n; i++) {
+        if (!S.deck.length) { log('Deck is empty — no card drawn (no reshuffle).', 'warn'); break; }
+        S.hand.push(S.deck.shift()); got++;
+      }
+      if (got) log('Drew ' + got + ' card(s)' + (why ? ' (' + why + ')' : '') + '.');
+      return got;
+    }
+    function moveC1(delta, why) {
+      var before = S.c1;
+      S.c1 = Math.max(0, Math.min(zoneIds.length - 1, S.c1 + delta));
+      if (S.c1 !== before) {
+        if (S.c1 < before) S.c1BroughtBack = true;
+        if (S.c1 > 0) S.c1EverOutside = true;
+        log('COMPANION 1: ' + zoneName(before) + ' → ' + zoneName(S.c1) + ' (' + why + ')', delta > 0 ? 'bad' : 'good');
+      }
+    }
+    function gainProgress(n, why) { S.progress += n; S.progressEarned += n; log('+' + n + ' progress (' + why + '). Total ' + S.progress + '.', 'good'); }
+
+    // ---------- Setup ----------
+    function setup() {
+      var ids = cfg.deck.map(function (c) { return c.id; });
+      if (cfg.fasterVariant) {
+        ids = ids.filter(function (id) {
+          var c = card(id);
+          if (c.beat3 && S.flags.visited.indexOf(c.beat3) < 0) { S.removed.push(id); return false; }
+          return true;
+        });
+        if (S.removed.length) log('Faster variant: removed ' + S.removed.join(', ') + ' (Beat 3 spot skipped).');
+      }
+      S.deck = rng.shuffle(ids);
+      S.events = rng.shuffle(cfg.events.map(function (e) { return e.id; }));
+      log('Seed ' + seed + '. Bond: ' + S.flags.bond + ', key: ' + S.flags.key + '. Pressure ' + S.pressure + ', progress ' + S.progress + '.');
+      drawCards(cfg.startingHand, 'starting hand');
+      startRound();
+    }
+
+    // ---------- Round ----------
+    function startRound() {
+      S.round++;
+      S.roundStartedAt.push(now());
+      S.torch = 0; S.silence = false;
+      S.actionsLeft = cfg.actionsPerRound;
+      S.phase = 'actions';
+      log('— ROUND ' + S.round + ' —', 'round');
+      // NIGHT
+      var evId = S.events.shift();
+      // RULED (Kostka 2026-10-18) (confirmed): 8 events / 6 rounds never runs out at default tuning; if rounds > events, seen events are reshuffled.
+      if (!evId) { S.events = rng.shuffle(S.eventsSeen.slice()); evId = S.events.shift(); }
+      var ev = null; for (var i = 0; i < cfg.events.length; i++) if (cfg.events[i].id === evId) ev = cfg.events[i];
+      S.eventsSeen.push(evId);
+      S.lastEvent = { id: evId, cancelled: false };
+      if (S.bars > 0) {
+        S.bars--; S.lastEvent.cancelled = true;
+        log('NIGHT: ' + ev.name + ' — cancelled by a Bar (Bars left: ' + S.bars + ').', 'good');
+        return;
+      }
+      log('NIGHT: ' + ev.name, 'event');
+      if (ev.onlyIfPOVOutside && S.pov === 0) { log('POV is in the House — no effect.'); return; }
+      if (ev.c1Out) moveC1(ev.c1Out, ev.name);
+      if (ev.discardRandom) {
+        for (var k = 0; k < ev.discardRandom && S.hand.length; k++) {
+          var idx = rng.int(S.hand.length); var lost = S.hand.splice(idx, 1)[0]; S.discard.push(lost);
+          log('Discarded at random: ' + card(lost).name + '.', 'bad');
+        }
+      }
+      if (ev.noEndDraw) S.silence = true;
+      if (ev.pressure) changePressure(ev.pressure, ev.name);
+    }
+
+    function endRound() {
+      if (S.phase !== 'actions') return;
+      // END: exposure
+      if (S.pov === zoneIds.length - 1 && cfg.exposurePOV) changePressure(cfg.exposurePOV, 'POV in the Treeline');
+      if (ended()) return;
+      if (S.c1 === zoneIds.length - 1 && cfg.exposureC1) changePressure(cfg.exposureC1, 'COMPANION 1 in the Treeline');
+      if (ended()) return;
+      if (S.silence) log('Silence: no end-of-round draw.');
+      else drawCards(1, 'end of round');
+      if (S.hand.length > cfg.handLimit) { S.phase = 'discard'; log('Hand over limit (' + S.hand.length + '/' + cfg.handLimit + '): discard down.', 'warn'); return; }
+      finishRound();
+    }
+    function finishRound() {
+      snapshotRound();
+      if (S.round >= cfg.rounds) {
+        S.endReason = 'dawn'; S.roundsPlayed = S.round;
+        log('DAWN after round ' + S.round + '.', 'end');
+        S.endedAt = now();
+        S.phase = 'allocate';
+        return;
+      }
+      startRound();
+    }
+    function discardDown(cardId) {
+      if (S.phase !== 'discard') return err('Not discarding now.');
+      var i = S.hand.indexOf(cardId); if (i < 0) return err('Card not in hand.');
+      S.hand.splice(i, 1); S.discard.push(cardId); log('Discarded ' + card(cardId).name + ' (hand limit).');
+      if (S.hand.length <= cfg.handLimit) { S.phase = 'actions'; finishRound(); }
+      return ok();
+    }
+
+    // ---------- Tests ----------
+    function helpBonus(who) { return S.flags.bond === who.toUpperCase() ? cfg.helpBonusBonded : cfg.helpBonus; }
+    function helpEligible(who, stat) {
+      var h = cfg.helps[who]; if (!h) return { ok: false, why: 'unknown help' };
+      if (S.helps[who].used) return { ok: false, why: 'already used' };
+      if (h.stats.indexOf(stat) < 0) return { ok: false, why: 'not a ' + stat + ' helper' };
+      if (h.onlyInHouse && S.c1 !== 0) return { ok: false, why: 'COMPANION 1 is not in the House' };
+      return { ok: true, bonus: helpBonus(who) };
+    }
+    function previewTest(stat, difficulty, commits, helps) {
+      commits = commits || []; helps = helps || [];
+      var icon = ICON_OF_STAT[stat], icons = 0;
+      commits.forEach(function (id) { card(id).icons.forEach(function (ic) { if (ic === icon) icons++; }); });
+      var hb = 0; helps.forEach(function (w) { var e = helpEligible(w, stat); if (e.ok) hb += e.bonus; });
+      return { base: cfg.testBase, icons: icons, help: hb, preDraw: cfg.testBase + icons + hb, difficulty: difficulty };
+    }
+    function runTest(label, stat, difficulty, commits, helps, forcedRoll) {
+      commits = (commits || []).slice(); helps = (helps || []).slice();
+      for (var i = 0; i < commits.length; i++) if (S.hand.indexOf(commits[i]) < 0) throw new Error('Committed card not in hand: ' + commits[i]);
+      if (!cfg.allowBothHelpsOnOneTest && helps.length > 1) throw new Error('Only one Help per test.');
+      helps.forEach(function (w) { var e = helpEligible(w, stat); if (!e.ok) throw new Error('Help ' + w + ' not usable: ' + e.why); });
+      var pv = previewTest(stat, difficulty, commits, helps);
+      commits.forEach(function (id) { S.hand.splice(S.hand.indexOf(id), 1); S.discard.push(id); S.stats.commits++; S.stats.cardsCommitted.push(id); });
+      helps.forEach(function (w) { S.helps[w].used = true; S.helps[w].uses++; });
+      var roll = forcedRoll || (rng.int(6) + 1);
+      var tok = cfg.testBag[roll - 1];
+      var star = tok === 'STAR';
+      var total = pv.preDraw + (star ? 0 : tok);
+      var success = !star && total >= difficulty;
+      var strong = success && total >= difficulty + cfg.strongMargin;
+      S.stats.tests++; if (success) S.stats.testSuccesses++; if (star) S.stats.stars++;
+      var r = { label: label, stat: stat, difficulty: difficulty, base: pv.base, icons: pv.icons, help: pv.help, roll: roll, token: tok, star: star, total: total, success: success, strong: strong, commits: commits, helps: helps };
+      S.lastTest = r;
+      log(label + ' [' + stat + ' vs ' + difficulty + ']: base ' + pv.base + ' + icons ' + pv.icons + ' + help ' + pv.help + ' + draw ' + (star ? 'STAR' : (tok >= 0 ? '+' + tok : tok)) + ' (d6=' + roll + ') = ' + (star ? 'AUTO-FAIL' : total) + ' → ' + (star ? 'FAIL (STAR)' : strong ? 'STRONG SUCCESS' : success ? 'success' : 'fail'), success ? 'good' : 'bad');
+      if (helps.length) helps.forEach(function (w) { log('Help used: ' + (w === 'c1' ? 'COMPANION 1' : 'COMPANION 2') + ' (+' + helpBonus(w) + ').'); });
+      if (star) changePressure(cfg.starPressure, 'STAR');
+      return r;
+    }
+
+    // ---------- Actions ----------
+    function ok(extra) { return Object.assign({ ok: true }, extra || {}); }
+    function err(msg) { return { ok: false, error: msg }; }
+    function spend(name) { S.actionsLeft--; S.stats.actions[name] = (S.stats.actions[name] || 0) + 1; }
+    function needAction() {
+      if (S.phase !== 'actions') return 'Not in the action phase.';
+      if (S.actionsLeft <= 0) return 'No actions left — end the round.';
+      return null;
+    }
+    function badCommits(o, playedId) {
+      var c = (o && o.commits) || [], seen = {};
+      for (var i = 0; i < c.length; i++) {
+        if (c[i] === playedId) return 'A card is played OR committed, never both.';
+        if (S.hand.indexOf(c[i]) < 0) return 'Committed card not in hand: ' + c[i];
+        if (seen[c[i]]) return 'Card committed twice.'; seen[c[i]] = 1;
+      }
+      return null;
+    }
+
+    function doInvestigate(zoneIdx, label, commits, helps, forcedRoll) {
+      var z = cfg.zones[zoneIdx];
+      var diff = Math.max(0, z.investigateDifficulty - S.torch);
+      if (S.torch) log('Torch: difficulty ' + z.investigateDifficulty + ' → ' + diff + '.');
+      S.torch = 0;
+      var r = runTest(label + ' (' + z.name + ')', 'INSIGHT', diff, commits, helps, forcedRoll);
+      if (r.success && !ended()) gainProgress(z.progress + (r.strong ? cfg.strongInvestigateBonus : 0), 'Investigate ' + z.name + (r.strong ? ', strong' : ''));
+      return r;
+    }
+
+    var api = {
+      state: S,
+      cfg: cfg,
+      card: card,
+      zoneName: zoneName,
+      previewTest: previewTest,
+      helpEligible: helpEligible,
+      helpBonus: helpBonus,
+
+      move: function (toIdx) {
+        var e = needAction(); if (e) return err(e);
+        if (Math.abs(toIdx - S.pov) !== 1) return err('Move one zone at a time.');
+        spend('move');
+        log('Move: POV ' + zoneName(S.pov) + ' → ' + zoneName(toIdx) + '.');
+        S.pov = toIdx; if (toIdx > 0) S.povLeftHouse = true; return ok();
+      },
+      investigate: function (o) {
+        o = o || {}; var e = needAction() || badCommits(o); if (e) return err(e);
+        spend('investigate');
+        return ok({ test: doInvestigate(S.pov, 'Investigate', o.commits, o.helps, o.roll) });
+      },
+      steady: function (o) {
+        o = o || {}; var e = needAction() || badCommits(o); if (e) return err(e);
+        spend('steady');
+        var r = runTest('Steady', 'CARE', cfg.steadyDifficulty, o.commits, o.helps, o.roll);
+        if (r.success && !ended()) {
+          moveC1(-1, 'Steady');
+          changePressure(-(cfg.steadyPressureRelief + (r.strong ? cfg.strongSteadyBonus : 0)), 'Steady' + (r.strong ? ', strong' : ''));
+        }
+        return ok({ test: r });
+      },
+      holdDoor: function (o) {
+        o = o || {}; var e = needAction() || badCommits(o); if (e) return err(e);
+        if (zoneIds[S.pov] !== cfg.holdDoorZone) return err('Hold the door only works in the House.');
+        if (!cfg.barsStack && S.bars > 0) return err('A Bar is already down — Bars do not stack (max 1).');
+        spend('holdDoor');
+        var r = runTest('Hold the door', 'NERVE', cfg.holdDoorDifficulty, o.commits, o.helps, o.roll);
+        if (r.success && !ended()) { S.bars++; log('Bar placed (Bars: ' + S.bars + ').', 'good'); }
+        return ok({ test: r });
+      },
+      drawAction: function () {
+        var e = needAction(); if (e) return err(e);
+        if (!S.deck.length) return err('Deck is empty.'); // RULED (Kostka 2026-10-18) (confirmed): Draw with an empty deck is not allowed (no reshuffle)
+        spend('draw'); drawCards(1, 'Draw action'); return ok();
+      },
+      canPlay: function (id) {
+        if (S.phase !== 'actions' || S.actionsLeft <= 0) return { ok: false, why: 'no action' };
+        if (S.hand.indexOf(id) < 0) return { ok: false, why: 'not in hand' };
+        var c = card(id);
+        if (c.effect === 'investigateYardFromHouse' && cfg.photosRequiresHouse && S.pov !== 0) return { ok: false, why: 'POV must be in the House' };
+        if (c.effect === 'readyHelp' && cfg.pierogiNeedsUsedHelp && !S.helps.c1.used && !S.helps.c2.used) return { ok: false, why: 'no Help has been used yet' };
+        if (c.effect === 'placeBar' && !cfg.barsStack && S.bars > 0) return { ok: false, why: 'a Bar is already down (max 1)' };
+        return { ok: true };
+      },
+      /** play(cardId, params) params: {zone, commits, helps, helpToReady, roll} */
+      play: function (id, p) {
+        p = p || {};
+        var can = api.canPlay(id); if (!can.ok) return err('Cannot play: ' + can.why);
+        var c = card(id);
+        var bc = badCommits(p, id); if (bc) return err(bc);
+        spend('play');
+        S.hand.splice(S.hand.indexOf(id), 1); S.discard.push(id);
+        S.stats.plays++; S.stats.cardsPlayed.push(id);
+        log('PLAY ' + c.name + ': ' + c.text);
+        var res = ok();
+        switch (c.effect) {
+          case 'investigateYardFromHouse': res.test = doInvestigate(1, c.name, p.commits, p.helps, p.roll); break;
+          case 'investigateAnyZone':
+            var zi = p.zone == null ? S.pov : p.zone;
+            res.test = doInvestigate(zi, c.name, p.commits, p.helps, p.roll); break;
+          case 'placeBar': S.bars++; log('Bar placed (Bars: ' + S.bars + ').', 'good'); break;
+          case 'progressObject': gainProgress(S.flags.key === 'SHARED' ? c.valueShared : c.value, c.name + (S.flags.key === 'SHARED' ? ', SHARED' : '')); break;
+          case 'progress': gainProgress(c.value, c.name); break;
+          case 'torch': S.torch = c.value; log('Next Investigate this round: -' + c.value + ' difficulty.'); break;
+          case 'c1Home': if (S.c1 > 0) moveC1(-S.c1, c.name); else log('COMPANION 1 is already in the House.'); break;
+          case 'pressure': changePressure(c.value, c.name); break;
+          case 'draw': drawCards(c.value, c.name); break;
+          case 'readyHelp':
+            var w = p.helpToReady || (S.helps.c1.used ? 'c1' : 'c2');
+            if (S.helps[w].used) { S.helps[w].used = false; log((w === 'c1' ? 'COMPANION 1' : 'COMPANION 2') + "'s Help is ready again.", 'good'); }
+            else log('No used Help to ready.');
+            break;
+          case 'c1InwardAndCalm': moveC1(-1, c.name); changePressure(c.value, c.name); break;
+          default: log('Unknown effect ' + c.effect, 'warn');
+        }
+        return res;
+      },
+      endRound: function () {
+        if (S.phase !== 'actions') return err('Not in the action phase.');
+        if (S.actionsLeft > 0 && !cfg.allowPass) return err('Take all your actions first.');
+        if (S.actionsLeft > 0) log('Passed ' + S.actionsLeft + ' unused action(s).');
+        endRound(); return ok();
+      },
+      discardDown: discardDown,
+
+      // ---------- Scoring ----------
+      escapedTogether: function () { return !S.pressureMaxed && S.c1 === 0; },
+      validateAllocation: function (ids) {
+        ids = ids || [];
+        var cost = 0, seen = {};
+        for (var i = 0; i < ids.length; i++) {
+          if (seen[ids[i]]) return err('Thread listed twice: ' + ids[i]); seen[ids[i]] = 1;
+          var t = cfg.threads.filter(function (x) { return x.id === ids[i]; })[0];
+          if (!t) return err('Unknown thread ' + ids[i]);
+          cost += t.cost;
+        }
+        if (cost > S.progress) return err('Not enough progress (' + cost + ' > ' + S.progress + ').');
+        if (S.pressureMaxed && ids.length > cfg.maxThreadsIfPressureMaxed) return err('Pressure reached ' + cfg.pressureMax + ': resolve at most ' + cfg.maxThreadsIfPressureMaxed + ' Thread.');
+        if (cfg.allThreadsNeedEscapedTogether && ids.length >= cfg.threads.length && !api.escapedTogether()) return err('All three Threads also need Escaped together = Y.');
+        return ok({ cost: cost });
+      },
+      allocate: function (ids) {
+        if (S.phase !== 'allocate') return err('Not allocating now.');
+        ids = (ids || []).slice().sort();
+        var v = api.validateAllocation(ids); if (!v.ok) return v;
+        S.resolved = ids;
+        var esc = api.escapedTogether();
+        var key = ids.join('+');
+        var outcome;
+        if (S.pressureMaxed || ids.length <= 1) outcome = (cfg.outcome3StayedVariant && !S.pressureMaxed && esc) ? '3b' : '3'; // RULED (Kostka 2026-10-18): '3b' = Dawn, Together (0-1 Threads, escaped Y)
+        else if (ids.length === 3) outcome = '1';
+        else outcome = { 'T1+T2': '2a', 'T1+T3': '2b', 'T2+T3': '2c' }[key];
+        S.outcome = outcome;
+        var bondChange = S.c1 === 0 ? (S.c1BroughtBack ? cfg.c1BondPlusIfBroughtBackAndHome : 0) : cfg.c1BondMinusIfOutside;
+        var helpsUsed = [];
+        if (S.helps.c1.uses) helpsUsed.push('C1' + (S.helps.c1.uses > 1 ? 'x' + S.helps.c1.uses : ''));
+        if (S.helps.c2.uses) helpsUsed.push('C2' + (S.helps.c2.uses > 1 ? 'x' + S.helps.c2.uses : ''));
+        var inserts = [];
+        if (outcome === '3b') { if (ids.length === 1) inserts.push('together1', 'together1_' + ids[0]); else inserts.push('together0'); }
+        if (!esc && outcome !== '3' && outcome !== '3b') inserts.push('escapedN');
+        // RULED (Kostka 2026-10-18): the +3 Help bonus uses the Beat 4 choice, but the "bond raised" inserts use FINAL bond =
+        //   Beat 4 choice (+1 to the chosen companion) + encounter bond change (COMPANION 1 only).
+        var finalBondC1 = (S.flags.bond === 'C1' ? 1 : 0) + bondChange;
+        var finalBondC2 = (S.flags.bond === 'C2' ? 1 : 0);
+        if (finalBondC1 > 0) inserts.push('bondC1');
+        if (finalBondC2 > 0) inserts.push('bondC2');
+        inserts.push(S.flags.key === 'SHARED' ? 'shared' : 'kept');
+        if (S.pressure >= cfg.highPressureInsert[0] && S.pressure <= cfg.highPressureInsert[1]) inserts.push('highPressure');
+        S.result = {
+          outcome: outcome, threadsResolved: ids, progressAtEnd: S.progress, progressSpent: v.cost, progressLost: S.progress - v.cost,
+          escapedTogether: esc ? 'Y' : 'N', finalPressure: S.pressure, helpsUsed: helpsUsed, c1BondChange: bondChange,
+          bondChoice: S.flags.bond, keyChoice: S.flags.key, finalBondC1: finalBondC1, finalBondC2: finalBondC2, inserts: inserts
+        };
+        log('RESOLVED: ' + (ids.length ? ids.join(', ') : 'none') + ' → Outcome ' + outcome + '. Escaped together ' + (esc ? 'Y' : 'N') + ', final pressure ' + S.pressure + ', C1 bond ' + (bondChange > 0 ? '+' : '') + bondChange + '.', 'end');
+        S.phase = 'done';
+        return ok({ result: S.result });
+      },
+      /** threads affordable combos (for UI hints and tests) */
+      legalAllocations: function () {
+        var ids = cfg.threads.map(function (t) { return t.id; }), out = [];
+        for (var m = 0; m < (1 << ids.length); m++) {
+          var pick = ids.filter(function (_, i) { return m & (1 << i); });
+          if (api.validateAllocation(pick).ok) out.push(pick);
+        }
+        return out;
+      }
+    };
+
+    setup();
+    return api;
+  }
+
+  var Engine = { createGame: createGame, makeRng: makeRng, STAT_OF_ICON: STAT_OF_ICON, ICON_OF_STAT: ICON_OF_STAT };
+  if (typeof module !== 'undefined') module.exports = Engine; else root.Engine = Engine;
+})(this);
+
+</script>
+<script>
+/* =====================================================================
+ * stats.js — per-run playtest stats, stored in localStorage.
+ * One record per finished run. Export as JSON or CSV for testers.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+  // Kit v0.1 observation sheet "Record per run" fields (all present): progress earned | Threads resolved | escaped together |
+  // final pressure | Help used | bond change | key choice | outcome scene | rounds played | plays vs commits.
+  // Plus "Watch for" items that can be measured automatically, and run metadata.
+  var COLUMNS = [
+    // run metadata
+    'runId', 'finishedAt', 'build', 'seed', 'skin', 'tester',
+    // kit "Record per run"
+    'progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice',
+    'outcome', 'outcomeScene', 'roundsPlayed', 'plays', 'commits', 'playsVsCommits',
+    // kit "Watch for" (automatic part)
+    'encounterSeconds', 'secondsPerRound', 'povLeftHouse', 'c1EverOutside', 'c1EndedOutside',
+    // supporting detail
+    'endReason', 'totalSeconds', 'actionsTaken', 'startProgress', 'progressAtEnd', 'progressSpent', 'progressLost', 'threadsOpen', 'T1', 'T2', 'T3',
+    'maxPressure', 'pressureByRound', 'progressByRound', 'bondChoice', 'finalBondC1', 'finalBondC2', 'beat3Visited',
+    'tests', 'testSuccesses', 'stars', 'cardsPlayed', 'cardsCommitted', 'actionCounts'];
+
+  function buildRecord(game, meta) {
+    var S = game.state, R = S.result, cfg = game.cfg;
+    var open = cfg.threads.map(function (t) { return t.id; }).filter(function (id) { return R.threadsResolved.indexOf(id) < 0; });
+    var actions = 0; for (var k in S.stats.actions) actions += S.stats.actions[k];
+    return {
+      runId: meta.runId, finishedAt: new Date().toISOString(), build: cfg.version, seed: S.seed, skin: meta.skin || '', tester: meta.tester || '',
+      outcome: R.outcome, endReason: S.endReason, roundsPlayed: S.roundsPlayed, actionsTaken: actions,
+      startProgress: cfg.startProgress, progressEarned: S.progressEarned, progressAtEnd: R.progressAtEnd, progressSpent: R.progressSpent, progressLost: R.progressLost,
+      threadsResolved: R.threadsResolved.join('+'), threadsOpen: open.join('+'),
+      T1: R.threadsResolved.indexOf('T1') >= 0 ? 1 : 0, T2: R.threadsResolved.indexOf('T2') >= 0 ? 1 : 0, T3: R.threadsResolved.indexOf('T3') >= 0 ? 1 : 0,
+      escapedTogether: R.escapedTogether, finalPressure: R.finalPressure, maxPressure: S.maxPressureSeen,
+      pressureByRound: S.stats.pressureByRound.join(' '), progressByRound: S.stats.progressByRound.join(' '),
+      helpsUsed: R.helpsUsed.join('+'), c1BondChange: R.c1BondChange, bondChoice: R.bondChoice, keyChoice: R.keyChoice,
+      beat3Visited: S.flags.visited.join('+'),
+      plays: S.stats.plays, commits: S.stats.commits, tests: S.stats.tests, testSuccesses: S.stats.testSuccesses, stars: S.stats.stars,
+      cardsPlayed: S.stats.cardsPlayed.join(' '), cardsCommitted: S.stats.cardsCommitted.join(' '),
+      actionCounts: Object.keys(S.stats.actions).map(function (k) { return k + ':' + S.stats.actions[k]; }).join(' '),
+      encounterSeconds: meta.encounterSeconds, totalSeconds: meta.totalSeconds,
+      outcomeScene: meta.outcomeScene || '', playsVsCommits: S.stats.plays + ':' + S.stats.commits,
+      secondsPerRound: secondsPerRound(S), povLeftHouse: S.povLeftHouse ? 'Y' : 'N', c1EverOutside: S.c1EverOutside ? 'Y' : 'N',
+      c1EndedOutside: S.c1 > 0 ? 'Y' : 'N', finalBondC1: R.finalBondC1, finalBondC2: R.finalBondC2
+    };
+  }
+
+  // seconds spent in each round (space-separated), from the engine's round start timestamps to the end of the encounter
+  function secondsPerRound(S) {
+    var t = S.roundStartedAt || [], out = [];
+    for (var i = 0; i < t.length; i++) { var end = i + 1 < t.length ? t[i + 1] : (S.endedAt || t[i]); out.push(Math.round((end - t[i]) / 1000)); }
+    return out.join(' ');
+  }
+
+  function Store(key, storage) {
+    this.key = key;
+    this.storage = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+    this.mem = [];
+  }
+  Store.prototype.all = function () {
+    if (!this.storage) return this.mem.slice();
+    try { return JSON.parse(this.storage.getItem(this.key) || '[]'); } catch (e) { return []; }
+  };
+  Store.prototype.add = function (rec) {
+    var a = this.all(); a.push(rec);
+    if (this.storage) { try { this.storage.setItem(this.key, JSON.stringify(a)); } catch (e) { this.mem = a; } } else this.mem = a;
+    return a.length;
+  };
+  Store.prototype.clear = function () { if (this.storage) this.storage.removeItem(this.key); this.mem = []; };
+
+  function toJSON(runs) { return JSON.stringify({ exportedAt: new Date().toISOString(), runs: runs }, null, 2); }
+  function csvCell(v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function toCSV(runs) {
+    var lines = [COLUMNS.join(',')];
+    runs.forEach(function (r) { lines.push(COLUMNS.map(function (c) { return csvCell(r[c]); }).join(',')); });
+    return lines.join('\n') + '\n';
+  }
+  function summary(runs) {
+    var s = { runs: runs.length, outcomes: {}, avgProgressEarned: 0, avgFinalPressure: 0, escapedY: 0, early: 0, threadRate: { T1: 0, T2: 0, T3: 0 }, plays: 0, commits: 0 };
+    runs.forEach(function (r) {
+      s.outcomes[r.outcome] = (s.outcomes[r.outcome] || 0) + 1;
+      s.avgProgressEarned += +r.progressEarned; s.avgFinalPressure += +r.finalPressure;
+      if (r.escapedTogether === 'Y') s.escapedY++; if (r.endReason === 'pressure') s.early++;
+      s.threadRate.T1 += +r.T1; s.threadRate.T2 += +r.T2; s.threadRate.T3 += +r.T3;
+      s.plays += +r.plays; s.commits += +r.commits;
+    });
+    if (runs.length) { s.avgProgressEarned = +(s.avgProgressEarned / runs.length).toFixed(2); s.avgFinalPressure = +(s.avgFinalPressure / runs.length).toFixed(2); }
+    return s;
+  }
+
+  var Stats = { COLUMNS: COLUMNS, buildRecord: buildRecord, Store: Store, toJSON: toJSON, toCSV: toCSV, summary: summary };
+  if (typeof module !== 'undefined') module.exports = Stats; else root.Stats = Stats;
+})(this);
+
+</script>
+<script>
+/* =====================================================================
+ * ui.js — greybox DOM UI. All rules live in game.js; numbers in config.js;
+ * text in data/vn-text.js. This file only renders and routes clicks.
+ * ===================================================================== */
+(function () {
+  'use strict';
+  var cfg = CONFIG, TXT = VN_TEXT;
+  var qs = new URLSearchParams(location.search);
+  var app = document.getElementById('app');
+  var dbg = document.getElementById('debug');
+  var overlay = document.getElementById('overlay'), overlayBox = document.getElementById('overlayBox');
+  var store = new Stats.Store(cfg.statsStorageKey);
+
+  var U = {
+    screen: 'title', game: null,
+    skin: qs.get('skin') || cfg.defaultSkin,
+    seed: qs.get('seed') ? parseInt(qs.get('seed'), 10) : null,
+    tester: qs.get('tester') || '',
+    choices: { bond: null, key: null, visited: [] },
+    steps: [], stepIdx: 0, spotPick: [],
+    test: null, alloc: [], msg: null, lastResult: null,
+    tStart: 0, tEncounter: 0, saved: false, runId: null
+  };
+  if (qs.get('debug') === '1') dbg.classList.remove('hidden');
+
+  // ---------- helpers ----------
+  function names() { return TXT.SKINS[U.skin] || TXT.SKINS.neutral; }
+  function t(s) { var n = names(); return String(s == null ? '' : s).replace(/\{(\w+)\}/g, function (m, k) { return n[k] != null ? n[k] : m; }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function T(s) { return esc(t(s)); }
+  function el(html) { var d = document.createElement('div'); d.innerHTML = html; return d; }
+  function on(id, fn) { var e = document.getElementById(id); if (e) e.onclick = fn; }
+  function icons(arr) { return arr.map(function (i) { return '<span class="icon" title="' + Engine.STAT_OF_ICON[i] + '">' + i + '</span>'; }).join(''); }
+  function zoneIdx(id) { for (var i = 0; i < cfg.zones.length; i++) if (cfg.zones[i].id === id) return i; return -1; }
+  function newSeed() { return Math.floor(Math.random() * 1e9); }
+
+  // ---------- TITLE ----------
+  function renderTitle() {
+    U.screen = 'title';
+    var skins = Object.keys(TXT.SKINS).map(function (k) { return '<option value="' + k + '"' + (k === U.skin ? ' selected' : '') + '>' + k + (k === 'neutral' ? ' (CAPS slots)' : ' — ' + TXT.SKINS[k].POV) + '</option>'; }).join('');
+    app.innerHTML =
+      '<div class="panel"><h1>' + T(TXT.title) + '</h1><p class="muted">' + T(TXT.subtitle) + '</p>' +
+      '<p>' + T(TXT.encounterGoal) + ' About 20–30 minutes. Your run stats are saved in this browser — please send them with <b>Stats → Download</b> at the end.</p>' +
+      '<div class="row"><label>Seed <input id="inSeed" size="12" placeholder="random" value="' + (U.seed != null ? U.seed : '') + '"></label>' +
+      '<label>Names <select id="inSkin">' + skins + '</select></label>' +
+      '<label>Tester name (optional) <input id="inTester" size="14" value="' + esc(U.tester) + '"></label></div>' +
+      '<p><button class="primary" id="bStart">Start (with story intro)</button> <button id="bSkip">Skip intro → straight to the encounter</button></p></div>';
+    on('bStart', function () { readTitle(); startIntro(); });
+    on('bSkip', function () { readTitle(); renderQuickChoices(); });
+    renderDebug();
+  }
+  function readTitle() {
+    var s = document.getElementById('inSeed').value.trim();
+    U.seed = s ? (parseInt(s, 10) >>> 0) : newSeed();
+    U.skin = document.getElementById('inSkin').value;
+    U.tester = document.getElementById('inTester').value.trim();
+    U.choices = { bond: null, key: null, visited: [] };
+    U.tStart = Date.now(); U.saved = false; U.runId = Date.now().toString(36) + '-' + U.seed;
+    document.getElementById('seedLabel').textContent = 'seed ' + U.seed;
+  }
+  function renderQuickChoices() {
+    U.screen = 'quick';
+    function opts(key) { return TXT.choices[key].options.map(function (o) { return '<label><input type="radio" name="' + key + '" value="' + o.value + '"' + (o === TXT.choices[key].options[0] ? ' checked' : '') + '> ' + T(o.label) + '</label><br>'; }).join(''); }
+    app.innerHTML = '<div class="panel"><h2>Quick setup (skipping the VN)</h2><p><b>' + T(TXT.choices.bond.prompt) + '</b><br>' + opts('bond') + '</p><p><b>' + T(TXT.choices.key.prompt) + '</b><br>' + opts('key') + '</p><button class="primary" id="bGo">Begin the night</button></div>';
+    on('bGo', function () {
+      U.choices.bond = document.querySelector('input[name=bond]:checked').value;
+      U.choices.key = document.querySelector('input[name=key]:checked').value;
+      U.choices.visited = ['3a', '3b', '3c'];
+      startEncounter();
+    });
+  }
+
+  // ---------- VN INTRO ----------
+  function startIntro() {
+    U.screen = 'vn'; U.steps = []; U.stepIdx = 0;
+    TXT.intro.forEach(function (sc) {
+      if (sc.spots) { U.steps.push({ type: 'spots', scene: sc.scene }); return; }
+      (sc.lines || []).forEach(function (l) { U.steps.push({ type: 'line', scene: sc.scene, line: l }); });
+      (sc.choices || []).forEach(function (c) { U.steps.push({ type: 'choice', scene: sc.scene, key: c }); });
+    });
+    U.steps.push({ type: 'toEncounter' });
+    renderVN();
+  }
+  function expandSpots(scene, ids) {
+    var add = [];
+    ids.forEach(function (id) { var sp = TXT.spots[id]; sp.lines.forEach(function (l) { add.push({ type: 'line', scene: scene + ' — ' + t(sp.label), line: l }); }); });
+    U.steps.splice.apply(U.steps, [U.stepIdx, 1].concat(add));
+  }
+  // [Bracketed] text = stage direction, rendered in italics.
+  function dirs(html) { return html.replace(/\[([^\]]*)\]/g, '<em class="dir">$1</em>'); }
+  function lineHTML(l) {
+    if (l.narr) return '<div class="narr">' + dirs(T(l.narr)) + '</div>';
+    return '<div class="who">' + esc(names()[l.who] || l.who) + '</div><div>' + dirs(T(l.text)) + '</div>';
+  }
+  function renderVN() {
+    var st = U.steps[U.stepIdx];
+    if (!st) return;
+    if (st.type === 'toEncounter') { startEncounter(); return; }
+    if (st.type === 'spots') {
+      var all = Object.keys(TXT.spots);
+      if (!cfg.fasterVariant) { U.choices.visited = all; expandSpots(st.scene, all); return renderVN(); }
+      // faster variant: choose N of 3
+      app.innerHTML = '<div class="vn"><div class="scene">' + T(st.scene) + '</div><div class="box"><div>Visit ' + cfg.beat3SpotsToVisit + ' of ' + all.length + ' spots. (The skipped spot\'s card is removed from the deck.)</div><div class="choices">' +
+        all.map(function (id) { return '<label><input type="checkbox" class="spot" value="' + id + '"> ' + T(TXT.spots[id].label) + '</label><br>'; }).join('') +
+        '</div><div class="nav"><button class="primary" id="bSpots">Go</button></div></div></div>';
+      on('bSpots', function () {
+        var ids = Array.prototype.map.call(document.querySelectorAll('.spot:checked'), function (x) { return x.value; });
+        if (ids.length !== cfg.beat3SpotsToVisit) { alert('Pick exactly ' + cfg.beat3SpotsToVisit + '.'); return; }
+        U.choices.visited = ids; expandSpots(st.scene, ids); renderVN();
+      });
+      return;
+    }
+    if (st.type === 'choice') {
+      var ch = TXT.choices[st.key];
+      app.innerHTML = '<div class="vn"><div class="scene">' + T(st.scene) + '</div><div class="box"><div class="who">Choice</div><div>' + T(ch.prompt) + '</div><div class="choices">' +
+        ch.options.map(function (o, i) { return '<button data-i="' + i + '">' + T(o.label) + '</button>'; }).join('') + '</div></div></div>';
+      Array.prototype.forEach.call(app.querySelectorAll('.choices button'), function (b) {
+        b.onclick = function () {
+          var o = ch.options[+b.dataset.i]; U.choices[st.key] = o.value;
+          if (o.after) U.steps.splice(U.stepIdx + 1, 0, { type: 'line', scene: st.scene, line: { narr: o.after } });
+          U.stepIdx++; renderVN();
+        };
+      });
+      return;
+    }
+    app.innerHTML = '<div class="vn"><div class="scene">' + T(st.scene) + '</div><div class="box">' + lineHTML(st.line) +
+      '<div class="nav"><button id="bSkipVN">Skip to choices</button><button class="primary" id="bNext">Next ▸</button></div></div></div>';
+    on('bNext', function () { U.stepIdx++; renderVN(); });
+    on('bSkipVN', function () {
+      // jump to the next choice (or the encounter), still expanding spots
+      for (var i = U.stepIdx + 1; i < U.steps.length; i++) { var ty = U.steps[i].type; if (ty === 'choice' || ty === 'toEncounter' || ty === 'spots') { U.stepIdx = i; break; } }
+      renderVN();
+    });
+    document.getElementById('bNext').focus();
+  }
+
+  // ---------- ENCOUNTER ----------
+  function startEncounter() {
+    U.game = Engine.createGame(cfg, { seed: U.seed, bond: U.choices.bond || 'C1', key: U.choices.key || 'SHARED', visited: U.choices.visited.length ? U.choices.visited : ['3a', '3b', '3c'] });
+    U.tEncounter = Date.now(); U.test = null; U.alloc = []; U.msg = null; U.lastResult = null; U.saved = false;
+    window.__game = U.game; // handy for playtest debugging in the console
+    U.screen = 'encounter';
+    renderEncounter();
+  }
+
+  function band(p) { for (var i = 0; i < TXT.pressureBands.length; i++) { var b = TXT.pressureBands[i]; if (p >= b.min && p <= b.max) return t(b.text); } return ''; }
+
+  function renderEncounter() {
+    var G = U.game, S = G.state;
+    if (S.phase === 'allocate') return renderAllocate();
+    if (S.phase === 'done') return renderOutro();
+    var n = names();
+    var track = ''; for (var p = 0; p <= cfg.pressureMax; p++) track += '<span class="' + (p === S.pressure ? 'on ' : '') + (p === cfg.pressureMax ? 'max' : '') + '">' + p + '</span>';
+    var ev = S.lastEvent, evDef = cfg.events.filter(function (e) { return e.id === ev.id; })[0];
+    var zones = cfg.zones.map(function (z, i) {
+      var toks = '';
+      if (S.pov === i) toks += '<span class="tok pov">' + esc(n.POV) + '</span>';
+      if (S.c1 === i) toks += '<span class="tok c1">' + esc(n.C1) + '</span>';
+      if (i === 0) toks += '<span class="tok">' + esc(n.C2) + '</span>';
+      return '<div class="zone' + (S.pov === i ? ' here' : '') + '"><b>' + z.name + '</b> <span class="muted">Investigate ' + z.investigateDifficulty + ' → +' + z.progress + ' progress' + (i === cfg.zones.length - 1 ? ' · end round here: pressure +1' : '') + '</span><div>' + toks + '</div></div>';
+    }).join('');
+    var threads = cfg.threads.map(function (th) { return '<div class="thread"><b>' + th.id + ' · ' + th.name + '</b> — cost ' + th.cost + '<br><span class="muted">' + T(TXT.threads[th.id]) + '</span></div>'; }).join('');
+    var helps = ['c1', 'c2'].map(function (w) {
+      var h = cfg.helps[w];
+      return '<div>' + esc(w === 'c1' ? n.C1 : n.C2) + ' Help: <b>' + (S.helps[w].used ? 'used' : 'ready') + '</b> (+' + G.helpBonus(w) + ' to ' + h.stats.join('/') + (h.onlyInHouse ? ', only while she is in the House' : '') + ')</div>';
+    }).join('');
+    var inDiscard = S.phase === 'discard';
+    var hand = S.hand.map(function (id) {
+      var c = G.card(id), can = G.canPlay(id);
+      var btn = inDiscard ? '<button data-discard="' + id + '">Discard</button>'
+        : '<button data-play="' + id + '"' + (can.ok ? '' : ' disabled title="' + esc(can.why) + '"') + '>Play (1 action)</button>' + (can.ok || can.why === 'no action' ? '' : '<div class="muted">' + esc(can.why) + '</div>');
+      return '<div class="card"><div class="nm">' + T(c.name) + '</div><div class="ic">' + icons(c.icons) + '</div><div class="fx">' + T(c.text) + '</div><div class="fl">' + T(c.flavour) + '</div>' + btn + '</div>';
+    }).join('') || '<span class="muted">No cards in hand.</span>';
+    var a = S.phase === 'actions' && S.actionsLeft > 0;
+    var inHouse = S.pov === zoneIdx(cfg.holdDoorZone);
+    var moves = '';
+    if (S.pov > 0) moves += '<button id="aIn"' + (a ? '' : ' disabled') + '>Move → ' + cfg.zones[S.pov - 1].name + '</button>';
+    if (S.pov < cfg.zones.length - 1) moves += '<button id="aOut"' + (a ? '' : ' disabled') + '>Move → ' + cfg.zones[S.pov + 1].name + '</button>';
+
+    app.innerHTML =
+      '<div class="panel"><div class="row"><div class="col">' +
+        '<span class="stat">Round <b>' + S.round + '</b>/' + cfg.rounds + '</span>' +
+        '<span class="stat">Actions left <b>' + S.actionsLeft + '</b></span>' +
+        '<span class="stat">Progress <b>' + S.progress + '</b></span>' +
+        '<span class="stat">Bar <b>' + (S.bars ? 'DOWN' : 'none') + '</b></span>' +
+        (S.torch ? '<span class="stat">Torch <b>-' + S.torch + '</b></span>' : '') +
+        '<span class="stat muted">Deck ' + S.deck.length + ' · discard ' + S.discard.length + '</span>' +
+      '</div><div><h3>Pressure</h3><div class="track">' + track + '</div><div class="muted">' + esc(band(S.pressure)) + '</div></div></div></div>' +
+      '<div class="panel event"><b>Night ' + S.round + ': ' + esc(evDef.name) + '</b>' + (ev.cancelled ? ' — <span class="good">cancelled by a Bar</span>' : '') + '<br><span class="muted">' + T(TXT.events[ev.id] || '') + '</span></div>' +
+      (U.msg ? '<div class="panel ' + (U.msg.kind || '') + '">' + esc(U.msg.text) + '</div>' : '') +
+      (U.lastResult ? '<div class="panel result">' + esc(U.lastResult) + '</div>' : '') +
+      '<div class="panel"><div class="zones">' + zones + '</div></div>' +
+      '<div class="panel actions"><h3>' + (inDiscard ? 'Hand over limit — discard down to ' + cfg.handLimit : 'Actions') + '</h3>' +
+        (inDiscard ? '' :
+        moves +
+        '<button id="aInv"' + (a ? '' : ' disabled') + '>Investigate ' + cfg.zones[S.pov].name + ' (INSIGHT ' + Math.max(0, cfg.zones[S.pov].investigateDifficulty - S.torch) + ')</button>' +
+        '<button id="aSteady"' + (a ? '' : ' disabled') + '>Steady (CARE ' + cfg.steadyDifficulty + ')</button>' +
+        '<button id="aHold"' + (a && inHouse && (cfg.barsStack || !S.bars) ? '' : ' disabled title="' + (!inHouse ? 'House only' : (!cfg.barsStack && S.bars) ? 'A Bar is already down (max 1)' : 'No action left') + '"') + '>Hold the door (NERVE ' + cfg.holdDoorDifficulty + ')</button>' +
+        (!cfg.barsStack && S.bars ? '<span class="muted"> A Bar is down: the next Night event is cancelled. Bars don\'t stack, so Hold the door and Mother\'s Rule are unavailable until it is used.</span>' : '') +
+        '<button id="aDraw"' + (a && S.deck.length ? '' : ' disabled') + '>Draw 1</button>' +
+        '<button id="aEnd" class="primary">' + (S.actionsLeft > 0 ? 'End round (pass ' + S.actionsLeft + ')' : 'End round ▸') + '</button>') +
+      '</div>' +
+      '<div class="panel"><h3>Hand (' + S.hand.length + '/' + cfg.handLimit + ') — Play for the effect (1 action) or commit to a test for icons (free)</h3><div class="cards">' + hand + '</div></div>' +
+      '<div class="row"><div class="panel col"><h3>Threads (pay at the end)</h3>' + threads + '</div><div class="panel col"><h3>Companion Help (once each)</h3>' + helps + '</div></div>';
+
+    on('aIn', function () { act(G.move(S.pov - 1)); });
+    on('aOut', function () { act(G.move(S.pov + 1)); });
+    on('aInv', function () { openTest({ kind: 'investigate', stat: 'INSIGHT', zone: S.pov }); });
+    on('aSteady', function () { openTest({ kind: 'steady', stat: 'CARE' }); });
+    on('aHold', function () { openTest({ kind: 'holdDoor', stat: 'NERVE' }); });
+    on('aDraw', function () { act(G.drawAction()); });
+    on('aEnd', function () { U.lastResult = null; act(G.endRound()); });
+    Array.prototype.forEach.call(app.querySelectorAll('[data-play]'), function (b) { b.onclick = function () { playCard(b.dataset.play); }; });
+    Array.prototype.forEach.call(app.querySelectorAll('[data-discard]'), function (b) { b.onclick = function () { act(G.discardDown(b.dataset.discard)); }; });
+    renderDebug();
+  }
+
+  function act(res) {
+    U.msg = res && !res.ok ? { kind: 'warn', text: res.error } : null;
+    if (res && res.test) U.lastResult = describeTest(res.test);
+    renderEncounter();
+  }
+  function describeTest(r) {
+    var tok = r.star ? 'STAR' : (r.token >= 0 ? '+' + r.token : String(r.token));
+    return r.label + ' — ' + r.stat + ' vs ' + r.difficulty + '\n' +
+      'base ' + r.base + ' + icons ' + r.icons + ' + help ' + r.help + ' + draw ' + tok + ' (d6 rolled ' + r.roll + ') = ' + (r.star ? 'auto-fail' : r.total) + '\n' +
+      (r.star ? '✶ STAR: automatic fail, pressure +' + cfg.starPressure : r.strong ? 'STRONG SUCCESS' : r.success ? 'Success' : 'Fail');
+  }
+
+  function playCard(id) {
+    var G = U.game, c = G.card(id);
+    if (c.effect === 'investigateYardFromHouse') return openTest({ kind: 'play', cardId: id, stat: 'INSIGHT', zone: 1 });
+    if (c.effect === 'investigateAnyZone') return openTest({ kind: 'play', cardId: id, stat: 'INSIGHT', zone: U.game.state.pov, chooseZone: true });
+    if (c.effect === 'readyHelp') {
+      var S = G.state, used = ['c1', 'c2'].filter(function (w) { return S.helps[w].used; });
+      if (used.length > 1) {
+        var w = confirm('Ready ' + names().C1 + "'s Help? (Cancel = " + names().C2 + "'s)") ? 'c1' : 'c2';
+        return act(G.play(id, { helpToReady: w }));
+      }
+      return act(G.play(id, { helpToReady: used[0] }));
+    }
+    act(G.play(id));
+  }
+
+  // ---------- Test panel (commit cards + Help before the draw) ----------
+  function openTest(o) {
+    U.test = { kind: o.kind, stat: o.stat, cardId: o.cardId, zone: o.zone, chooseZone: o.chooseZone, commits: [], helps: [] };
+    renderTest();
+  }
+  function testDifficulty() {
+    var G = U.game, S = G.state, x = U.test;
+    if (x.kind === 'steady') return cfg.steadyDifficulty;
+    if (x.kind === 'holdDoor') return cfg.holdDoorDifficulty;
+    return Math.max(0, cfg.zones[x.zone].investigateDifficulty - S.torch);
+  }
+  function renderTest() {
+    var G = U.game, S = G.state, x = U.test, n = names();
+    var icon = Engine.ICON_OF_STAT[x.stat];
+    var label = x.kind === 'play' ? G.card(x.cardId).name : ({ investigate: 'Investigate', steady: 'Steady', holdDoor: 'Hold the door' })[x.kind];
+    var cards = S.hand.filter(function (id) { return id !== x.cardId; }).map(function (id) {
+      var c = G.card(id), m = c.icons.filter(function (i) { return i === icon; }).length, sel = x.commits.indexOf(id) >= 0;
+      return '<div class="card' + (sel ? ' sel' : '') + '"><div class="nm">' + T(c.name) + '</div><div class="ic">' + icons(c.icons) + '</div><div class="fx muted">' + T(c.text) + '</div><div>+' + m + ' to this test</div><button data-c="' + id + '">' + (sel ? 'Un-commit' : 'Commit') + '</button></div>';
+    }).join('') || '<span class="muted">No cards to commit.</span>';
+    var helps = ['c1', 'c2'].map(function (w) {
+      var e = G.helpEligible(w, x.stat), sel = x.helps.indexOf(w) >= 0;
+      return '<label' + (e.ok ? '' : ' class="muted"') + '><input type="checkbox" data-h="' + w + '"' + (sel ? ' checked' : '') + (e.ok ? '' : ' disabled') + '> ' + esc(w === 'c1' ? n.C1 : n.C2) + ' Help ' + (e.ok ? '+' + e.bonus + ' ' + T(TXT.helpLines[w]) : '(' + esc(e.why) + ')') + '</label><br>';
+    }).join('');
+    var zoneSel = x.chooseZone ? '<p>Zone: ' + cfg.zones.map(function (z, i) { return '<label><input type="radio" name="tz" value="' + i + '"' + (i === x.zone ? ' checked' : '') + '> ' + z.name + ' (' + z.investigateDifficulty + ' → +' + z.progress + ')</label> '; }).join('') + '</p>' : '';
+    var diff = testDifficulty();
+    var pv = G.previewTest(x.stat, diff, x.commits, x.helps);
+    overlay.classList.remove('hidden');
+    overlayBox.innerHTML = '<h2>' + T(label) + ' — ' + x.stat + ' test, difficulty ' + diff + '</h2>' + zoneSel +
+      '<p>Total = base ' + pv.base + ' + icons ' + pv.icons + ' + help ' + pv.help + ' = <b>' + pv.preDraw + '</b> before the draw. ' +
+      'Draw (d6): 1–3 = 0 · 4 = −1 · 5 = +1 · 6 = STAR (fail, pressure +' + cfg.starPressure + '). Strong success at ' + (diff + cfg.strongMargin) + '+.</p>' +
+      '<h3>Commit cards (free, discarded; matching ' + icon + ' icons count)</h3><div class="cards">' + cards + '</div>' +
+      '<h3>Help</h3>' + helps +
+      '<p><button class="primary" id="tGo">Draw &amp; resolve</button> <button id="tCancel">Cancel</button></p>';
+    Array.prototype.forEach.call(overlayBox.querySelectorAll('[data-c]'), function (b) {
+      b.onclick = function () { var i = x.commits.indexOf(b.dataset.c); if (i >= 0) x.commits.splice(i, 1); else x.commits.push(b.dataset.c); renderTest(); };
+    });
+    Array.prototype.forEach.call(overlayBox.querySelectorAll('[data-h]'), function (b) {
+      b.onchange = function () { var i = x.helps.indexOf(b.dataset.h); if (i >= 0) x.helps.splice(i, 1); else x.helps.push(b.dataset.h); renderTest(); };
+    });
+    Array.prototype.forEach.call(overlayBox.querySelectorAll('input[name=tz]'), function (b) { b.onchange = function () { x.zone = +b.value; renderTest(); }; });
+    on('tCancel', function () { closeOverlay(); U.test = null; });
+    on('tGo', function () {
+      var p = { commits: x.commits.slice(), helps: x.helps.slice() }, res;
+      if (x.kind === 'investigate') res = G.investigate(p);
+      else if (x.kind === 'steady') res = G.steady(p);
+      else if (x.kind === 'holdDoor') res = G.holdDoor(p);
+      else { p.zone = x.zone; res = G.play(x.cardId, p); }
+      closeOverlay(); U.test = null; act(res);
+    });
+  }
+  function closeOverlay() { overlay.classList.add('hidden'); overlayBox.innerHTML = ''; }
+
+  // ---------- Allocation ----------
+  function renderAllocate() {
+    U.screen = 'allocate';
+    var G = U.game, S = G.state;
+    var v = G.validateAllocation(U.alloc);
+    var cost = 0; U.alloc.forEach(function (id) { cost += cfg.threads.filter(function (x) { return x.id === id; })[0].cost; });
+    var head = S.endReason === 'pressure' ? '<p class="bad">' + T(TXT.earlyEnd) + '</p><p>Pressure reached ' + cfg.pressureMax + ': you may resolve at most ' + cfg.maxThreadsIfPressureMaxed + ' Thread.</p>' : '<p>' + T(TXT.dawn) + '</p>';
+    var threads = cfg.threads.map(function (th) {
+      var sel = U.alloc.indexOf(th.id) >= 0;
+      return '<div class="thread' + (sel ? ' on' : '') + '"><label><input type="checkbox" data-t="' + th.id + '"' + (sel ? ' checked' : '') + '> <b>' + th.id + ' · ' + th.name + '</b> — cost ' + th.cost + '</label><br><span class="muted">' + T(TXT.threads[th.id]) + '</span></div>';
+    }).join('');
+    app.innerHTML = '<div class="panel"><h2>' + (S.endReason === 'pressure' ? 'The night breaks' : 'Dawn') + '</h2>' + head +
+      '<p>Progress: <b>' + S.progress + '</b> · selected cost: <b>' + cost + '</b> · unspent progress is lost. Escaped together: <b>' + (G.escapedTogether() ? 'Y' : 'N') + '</b> (needed for all three).</p>' +
+      threads + (v.ok ? '' : '<p class="warn">' + esc(v.error) + '</p>') +
+      '<button class="primary" id="bResolve"' + (v.ok ? '' : ' disabled') + '>Resolve ' + (U.alloc.length ? U.alloc.join(' + ') : 'nothing') + '</button></div>';
+    Array.prototype.forEach.call(app.querySelectorAll('[data-t]'), function (b) {
+      b.onchange = function () { var i = U.alloc.indexOf(b.dataset.t); if (i >= 0) U.alloc.splice(i, 1); else U.alloc.push(b.dataset.t); renderAllocate(); };
+    });
+    on('bResolve', function () { var r = G.allocate(U.alloc); if (r.ok) renderOutro(); else { U.msg = { text: r.error }; renderAllocate(); } });
+    renderDebug();
+  }
+
+  // ---------- OUTRO ----------
+  function renderOutro() {
+    U.screen = 'outro';
+    var G = U.game, S = G.state, R = S.result, o = TXT.outcomes[R.outcome];
+    if (!U.saved) {
+      var now = Date.now();
+      store.add(Stats.buildRecord(G, { runId: U.runId, skin: U.skin, tester: U.tester, outcomeScene: o.title, encounterSeconds: Math.round((now - U.tEncounter) / 1000), totalSeconds: Math.round((now - U.tStart) / 1000) }));
+      U.saved = true;
+    }
+    var lines = o.lines.map(function (l) { return '<div class="box">' + lineHTML(l) + '</div>'; }).join('');
+    var ins = R.inserts.map(function (k) { return TXT.inserts[k].map(function (l) { return '<div class="box">' + lineHTML(l) + '</div>'; }).join(''); }).join('');
+    var flags = [['Threads resolved', R.threadsResolved.join(', ') || 'none'], ['Escaped together', R.escapedTogether], ['Final pressure', R.finalPressure],
+      ['Help used', R.helpsUsed.join(', ') || 'none'], [names().C1 + ' bond change (encounter)', (R.c1BondChange > 0 ? '+' : '') + R.c1BondChange], ['Beat 4 bond', R.bondChoice],
+      ['Final bond ' + names().C1 + ' / ' + names().C2, R.finalBondC1 + ' / ' + R.finalBondC2], ['Key choice', R.keyChoice],
+      ['Progress earned / at end / lost', S.progressEarned + ' / ' + R.progressAtEnd + ' / ' + R.progressLost], ['Rounds played', S.roundsPlayed + (S.endReason === 'pressure' ? ' (early end)' : ' (dawn)')],
+      ['Plays vs commits', S.stats.plays + ' vs ' + S.stats.commits]];
+    app.innerHTML = '<div class="vn"><div class="scene">' + esc(o.title) + '</div>' + (o.placeholder ? '<div class="box warn">Placeholder scene: final text to come from the Narrative Writer.</div>' : '') + lines + (ins ? '<div class="scene" style="margin-top:10px">Inserts</div>' + ins : '') + '</div>' +
+      '<div class="panel"><h3>Flags out</h3><table>' + flags.map(function (f) { return '<tr><th>' + esc(f[0]) + '</th><td>' + esc(f[1]) + '</td></tr>'; }).join('') + '</table>' +
+      '<p class="muted">This run was saved to Stats (' + store.all().length + ' run(s) in this browser).</p>' +
+      '<p><button class="primary" id="bAgain">Play again (new seed)</button> <button id="bSame">Replay same seed</button> <button id="bStats2">Stats / send results</button></p></div>';
+    on('bAgain', function () { U.seed = null; renderTitle(); });
+    on('bSame', function () { renderTitle(); });
+    on('bStats2', openStats);
+    renderDebug();
+  }
+
+  // ---------- Stats panel ----------
+  function openStats() {
+    var runs = store.all(), sm = Stats.summary(runs);
+    var cols = ['finishedAt', 'tester', 'seed', 'outcome', 'endReason', 'roundsPlayed', 'progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice', 'playsVsCommits', 'encounterSeconds'];
+    overlay.classList.remove('hidden');
+    overlayBox.innerHTML = '<h2>Run stats (this browser)</h2>' +
+      '<p>Runs: <b>' + sm.runs + '</b> · outcomes: ' + esc(JSON.stringify(sm.outcomes)) + ' · avg progress earned ' + sm.avgProgressEarned + ' · avg final pressure ' + sm.avgFinalPressure +
+      ' · escaped together ' + sm.escapedY + '/' + sm.runs + ' · early ends ' + sm.early + ' · threads T1/T2/T3 ' + sm.threadRate.T1 + '/' + sm.threadRate.T2 + '/' + sm.threadRate.T3 + ' · plays/commits ' + sm.plays + '/' + sm.commits + '</p>' +
+      '<div style="overflow:auto"><table><tr>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>' +
+      runs.slice().reverse().map(function (r) { return '<tr>' + cols.map(function (c) { return '<td>' + esc(r[c] == null ? '' : r[c]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>' +
+      '<p><button id="sCopyJ">Copy JSON</button> <button id="sCopyC">Copy CSV</button> <button id="sDlJ">Download JSON</button> <button id="sDlC">Download CSV</button> <button id="sClear">Clear all stats</button> <button class="primary" id="sClose">Close</button></p>' +
+      '<p class="muted">Send the downloaded file (or pasted text) to the studio. Stats stay only in this browser.</p><textarea id="sOut" readonly placeholder="Copied text appears here too, in case clipboard access is blocked."></textarea>';
+    function copy(txt) {
+      document.getElementById('sOut').value = txt;
+      if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function () { flash('Copied.'); }, function () { flash('Clipboard blocked — select the text below.'); });
+      else flash('Select the text below and copy it.');
+    }
+    function dl(txt, name, type) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+    function stamp() { return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'); }
+    on('sCopyJ', function () { copy(Stats.toJSON(store.all())); });
+    on('sCopyC', function () { copy(Stats.toCSV(store.all())); });
+    on('sDlJ', function () { dl(Stats.toJSON(store.all()), 'cottage-runs-' + stamp() + '.json', 'application/json'); });
+    on('sDlC', function () { dl(Stats.toCSV(store.all()), 'cottage-runs-' + stamp() + '.csv', 'text/csv'); });
+    on('sClear', function () { if (confirm('Delete all saved runs in this browser?')) { store.clear(); openStats(); } });
+    on('sClose', closeOverlay);
+  }
+  function flash(m) { var o = document.getElementById('sOut'); if (o) o.placeholder = m; var b = document.createElement('div'); b.className = 'muted'; b.textContent = m; overlayBox.appendChild(b); setTimeout(function () { b.remove(); }, 2500); }
+
+  function openRules() {
+    overlay.classList.remove('hidden');
+    overlayBox.innerHTML = '<h2>Quick rules</h2><ul>' +
+      '<li><b>Goal:</b> ' + T(TXT.encounterGoal) + ' Dawn comes after round ' + cfg.rounds + '. If pressure reaches ' + cfg.pressureMax + ', ' + T('{C1}') + ' walks out and it ends at once.</li>' +
+      '<li><b>Each round:</b> a Night event, then ' + cfg.actionsPerRound + ' actions (Move, Investigate, Steady, Hold the door [House only], Play a card, Draw). End: +1 pressure for you and for ' + T('{C1}') + ' if in the Treeline; draw 1; hand limit ' + cfg.handLimit + '.</li>' +
+      '<li><b>Tests:</b> ' + cfg.testBase + ' + matching icons on committed cards + Help + a d6 draw (1–3: 0, 4: −1, 5: +1, 6: STAR = fail and +1 pressure). Ties succeed. Beat it by ' + cfg.strongMargin + ' for a strong success.</li>' +
+      '<li><b>Cards:</b> Play for the effect (costs an action) OR commit to a test for icons (free). Never both.</li>' +
+      '<li><b>At the end:</b> spend progress to resolve Threads (full cost). All three also need you to escape together.</li></ul><button class="primary" id="rClose">Close</button>';
+    on('rClose', closeOverlay);
+  }
+
+  // ---------- Debug panel ----------
+  function renderDebug() {
+    if (dbg.classList.contains('hidden')) return;
+    var G = U.game;
+    var html = '<b>DEBUG</b> · screen ' + U.screen + ' · skin ' + U.skin + ' · build ' + esc(cfg.version) + '<br>';
+    if (G) {
+      var S = G.state;
+      html += 'seed <b>' + S.seed + '</b> · phase ' + S.phase + ' · round ' + S.round + '/' + cfg.rounds + ' · actions ' + S.actionsLeft + '<br>' +
+        'pressure ' + S.pressure + ' (max seen ' + S.maxPressureSeen + ', maxed ' + S.pressureMaxed + ') · progress ' + S.progress + ' (earned ' + S.progressEarned + ')<br>' +
+        'POV ' + cfg.zones[S.pov].name + ' · C1 ' + cfg.zones[S.c1].name + ' (brought back ' + S.c1BroughtBack + ') · bars ' + S.bars + ' · torch ' + S.torch + ' · silence ' + S.silence + '<br>' +
+        'helps c1 ' + (S.helps.c1.used ? 'used' : 'ready') + ' / c2 ' + (S.helps.c2.used ? 'used' : 'ready') + ' · bond ' + S.flags.bond + ' · key ' + S.flags.key + '<br>' +
+        'hand [' + S.hand.join(', ') + ']<br>deck [' + S.deck.join(', ') + ']<br>discard [' + S.discard.join(', ') + ']<br>' +
+        'night deck [' + S.events.join(', ') + '] · seen [' + S.eventsSeen.join(', ') + ']<br>' +
+        'plays ' + S.stats.plays + ' · commits ' + S.stats.commits + ' · tests ' + S.stats.tests + ' (ok ' + S.stats.testSuccesses + ', stars ' + S.stats.stars + ')<br>' +
+        (S.phase === 'allocate' ? 'legal allocations: ' + G.legalAllocations().map(function (a) { return '[' + a.join('+') + ']'; }).join(' ') + '<br>' : '') +
+        (S.result ? 'result ' + esc(JSON.stringify(S.result)) + '<br>' : '') +
+        '<div class="log">' + S.log.slice().reverse().map(function (l) { return '<div class="' + l.kind + '">R' + l.round + ' ' + esc(l.text) + '</div>'; }).join('') + '</div>';
+    } else html += 'No encounter yet.';
+    dbg.innerHTML = html;
+  }
+  function toggleDebug() { dbg.classList.toggle('hidden'); renderDebug(); }
+
+  on('btnDebug', toggleDebug);
+  on('btnStats', openStats);
+  on('btnRules', openRules);
+  on('btnRestart', function () { if (U.screen === 'title' || confirm('Restart? The current run will not be saved.')) { closeOverlay(); U.game = null; U.seed = null; document.getElementById('seedLabel').textContent = ''; renderTitle(); } });
+  document.addEventListener('keydown', function (e) {
+    if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (e.key === 'd' || e.key === 'D') toggleDebug();
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) { closeOverlay(); U.test = null; }
+  });
+
+  renderTitle();
+})();
+
+</script>
+</body>
+</html>

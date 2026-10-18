@@ -1,0 +1,92 @@
+/* =====================================================================
+ * stats.js — per-run playtest stats, stored in localStorage.
+ * One record per finished run. Export as JSON or CSV for testers.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+  // Kit v0.1 observation sheet "Record per run" fields (all present): progress earned | Threads resolved | escaped together |
+  // final pressure | Help used | bond change | key choice | outcome scene | rounds played | plays vs commits.
+  // Plus "Watch for" items that can be measured automatically, and run metadata.
+  var COLUMNS = [
+    // run metadata
+    'runId', 'finishedAt', 'build', 'seed', 'skin', 'tester',
+    // kit "Record per run"
+    'progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'c1BondChange', 'keyChoice',
+    'outcome', 'outcomeScene', 'roundsPlayed', 'plays', 'commits', 'playsVsCommits',
+    // kit "Watch for" (automatic part)
+    'encounterSeconds', 'secondsPerRound', 'povLeftHouse', 'c1EverOutside', 'c1EndedOutside',
+    // supporting detail
+    'endReason', 'totalSeconds', 'actionsTaken', 'startProgress', 'progressAtEnd', 'progressSpent', 'progressLost', 'threadsOpen', 'T1', 'T2', 'T3',
+    'maxPressure', 'pressureByRound', 'progressByRound', 'bondChoice', 'finalBondC1', 'finalBondC2', 'beat3Visited',
+    'tests', 'testSuccesses', 'stars', 'cardsPlayed', 'cardsCommitted', 'actionCounts'];
+
+  function buildRecord(game, meta) {
+    var S = game.state, R = S.result, cfg = game.cfg;
+    var open = cfg.threads.map(function (t) { return t.id; }).filter(function (id) { return R.threadsResolved.indexOf(id) < 0; });
+    var actions = 0; for (var k in S.stats.actions) actions += S.stats.actions[k];
+    return {
+      runId: meta.runId, finishedAt: new Date().toISOString(), build: cfg.version, seed: S.seed, skin: meta.skin || '', tester: meta.tester || '',
+      outcome: R.outcome, endReason: S.endReason, roundsPlayed: S.roundsPlayed, actionsTaken: actions,
+      startProgress: cfg.startProgress, progressEarned: S.progressEarned, progressAtEnd: R.progressAtEnd, progressSpent: R.progressSpent, progressLost: R.progressLost,
+      threadsResolved: R.threadsResolved.join('+'), threadsOpen: open.join('+'),
+      T1: R.threadsResolved.indexOf('T1') >= 0 ? 1 : 0, T2: R.threadsResolved.indexOf('T2') >= 0 ? 1 : 0, T3: R.threadsResolved.indexOf('T3') >= 0 ? 1 : 0,
+      escapedTogether: R.escapedTogether, finalPressure: R.finalPressure, maxPressure: S.maxPressureSeen,
+      pressureByRound: S.stats.pressureByRound.join(' '), progressByRound: S.stats.progressByRound.join(' '),
+      helpsUsed: R.helpsUsed.join('+'), c1BondChange: R.c1BondChange, bondChoice: R.bondChoice, keyChoice: R.keyChoice,
+      beat3Visited: S.flags.visited.join('+'),
+      plays: S.stats.plays, commits: S.stats.commits, tests: S.stats.tests, testSuccesses: S.stats.testSuccesses, stars: S.stats.stars,
+      cardsPlayed: S.stats.cardsPlayed.join(' '), cardsCommitted: S.stats.cardsCommitted.join(' '),
+      actionCounts: Object.keys(S.stats.actions).map(function (k) { return k + ':' + S.stats.actions[k]; }).join(' '),
+      encounterSeconds: meta.encounterSeconds, totalSeconds: meta.totalSeconds,
+      outcomeScene: meta.outcomeScene || '', playsVsCommits: S.stats.plays + ':' + S.stats.commits,
+      secondsPerRound: secondsPerRound(S), povLeftHouse: S.povLeftHouse ? 'Y' : 'N', c1EverOutside: S.c1EverOutside ? 'Y' : 'N',
+      c1EndedOutside: S.c1 > 0 ? 'Y' : 'N', finalBondC1: R.finalBondC1, finalBondC2: R.finalBondC2
+    };
+  }
+
+  // seconds spent in each round (space-separated), from the engine's round start timestamps to the end of the encounter
+  function secondsPerRound(S) {
+    var t = S.roundStartedAt || [], out = [];
+    for (var i = 0; i < t.length; i++) { var end = i + 1 < t.length ? t[i + 1] : (S.endedAt || t[i]); out.push(Math.round((end - t[i]) / 1000)); }
+    return out.join(' ');
+  }
+
+  function Store(key, storage) {
+    this.key = key;
+    this.storage = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+    this.mem = [];
+  }
+  Store.prototype.all = function () {
+    if (!this.storage) return this.mem.slice();
+    try { return JSON.parse(this.storage.getItem(this.key) || '[]'); } catch (e) { return []; }
+  };
+  Store.prototype.add = function (rec) {
+    var a = this.all(); a.push(rec);
+    if (this.storage) { try { this.storage.setItem(this.key, JSON.stringify(a)); } catch (e) { this.mem = a; } } else this.mem = a;
+    return a.length;
+  };
+  Store.prototype.clear = function () { if (this.storage) this.storage.removeItem(this.key); this.mem = []; };
+
+  function toJSON(runs) { return JSON.stringify({ exportedAt: new Date().toISOString(), runs: runs }, null, 2); }
+  function csvCell(v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function toCSV(runs) {
+    var lines = [COLUMNS.join(',')];
+    runs.forEach(function (r) { lines.push(COLUMNS.map(function (c) { return csvCell(r[c]); }).join(',')); });
+    return lines.join('\n') + '\n';
+  }
+  function summary(runs) {
+    var s = { runs: runs.length, outcomes: {}, avgProgressEarned: 0, avgFinalPressure: 0, escapedY: 0, early: 0, threadRate: { T1: 0, T2: 0, T3: 0 }, plays: 0, commits: 0 };
+    runs.forEach(function (r) {
+      s.outcomes[r.outcome] = (s.outcomes[r.outcome] || 0) + 1;
+      s.avgProgressEarned += +r.progressEarned; s.avgFinalPressure += +r.finalPressure;
+      if (r.escapedTogether === 'Y') s.escapedY++; if (r.endReason === 'pressure') s.early++;
+      s.threadRate.T1 += +r.T1; s.threadRate.T2 += +r.T2; s.threadRate.T3 += +r.T3;
+      s.plays += +r.plays; s.commits += +r.commits;
+    });
+    if (runs.length) { s.avgProgressEarned = +(s.avgProgressEarned / runs.length).toFixed(2); s.avgFinalPressure = +(s.avgFinalPressure / runs.length).toFixed(2); }
+    return s;
+  }
+
+  var Stats = { COLUMNS: COLUMNS, buildRecord: buildRecord, Store: Store, toJSON: toJSON, toCSV: toCSV, summary: summary };
+  if (typeof module !== 'undefined') module.exports = Stats; else root.Stats = Stats;
+})(this);
