@@ -8,6 +8,9 @@
  * Never copied: _src/, _mock* (reference mock-ups), _board_zones_debug / _board_late_zones_debug (reference), icons/*_64 (raster fallbacks; we use the SVGs), burnt_pierogi (dropped in v0.2), anything under any _retired/ folder or in manifest.retired (e.g. the thread icon).
  * Cast (which companions/<key>_* files fill which slot) is read from manifest.cast, not hardcoded.
  * Kit card id → artist file name mapping is CARD_FILES below.
+ * v0.4 (Ola, "v0.4 Stripped Core"): the 10 generic cards' art, icons/hour_1..6, end/ screens + end_screens boxes, board/zone_strip_<zone>,
+ * icons/clue; RETIRED and no longer loaded: moons, NERVE, Questions, companion tokens / portraits / Help, the 480x320 zone plates.
+ * The v0.3.2 build (?v04=0) shows greyboxes where its art was retired.
  * ===================================================================== */
 'use strict';
 var fs = require('fs'), path = require('path');
@@ -22,7 +25,10 @@ var L = fs.existsSync(path.join(src, 'cards/card_layout.json')) ? JSON.parse(fs.
 var CARD_FILES = { photos: 'footprint_photos', object: 'the_object', story: 'the_hosts_story', key: 'key_on_a_string', kompot: 'kompot',
   stove: 'stove_fire', blanket: 'thick_blanket', later: 'later_properly', rule: 'mothers_rule', chair: 'chair_under_the_handle',
   torch: 'torch', phone: 'phone_at_4', pierogi: null /* dropped: art not imported */,
-  bread: 'bread_and_salt' /* v0.3 Offering card: expected from Ola, greybox until then */ };
+  bread: 'bread_and_salt',
+  // v0.4 generic deck
+  lookCloser: 'look_closer', luckyFind: 'lucky_find', sharpEyes: 'sharp_eyes', deepBreath: 'deep_breath', warmStove: 'warm_stove',
+  bar: 'bar_the_door', ward: 'ward', shortcut: 'shortcut', rummage: 'rummage' };
 var CATS = ['clue', 'calm', 'protect', 'utility'];
 var copied = [], missing = [];
 // start clean so files the artist dropped or renamed (and our old WebP conversions) don't linger
@@ -30,8 +36,13 @@ if (!dry && fs.existsSync(dstRoot)) fs.rmSync(dstRoot, { recursive: true, force:
 
 // copy the best web version of <rel without extension>; prefer svg when allowed, else webp, else png
 var RETIRED = [];
-(M.retired || []).forEach(function (r) { var d = path.dirname(r.path); RETIRED.push(r.path); (r.also || []).forEach(function (f) { RETIRED.push(path.join(d, f)); }); });
-function isRetired(rel) { return /(^|\/)_retired\//.test(rel) || RETIRED.indexOf(rel) >= 0 || RETIRED.some(function (r) { return path.basename(r) === path.basename(rel); }); }
+var RETIRED_BASE = [];
+(M.retired || []).forEach(function (r) {
+  if (r.path) { var d = path.dirname(r.path); RETIRED.push(r.path); RETIRED_BASE.push(r.path); (r.also || []).forEach(function (f) { RETIRED.push(path.join(d, f)); RETIRED_BASE.push(path.join(d, f)); }); }
+  // v0.4 format: {folder: 'board/_retired/', files: [...]} → the live path without '_retired/' is retired too (e.g. board/zone_house.png)
+  if (r.folder) (r.files || []).forEach(function (f) { RETIRED.push(path.join(r.folder.replace(/_retired\/?$/, ''), f)); });
+});
+function isRetired(rel) { return /(^|\/)_retired\//.test(rel) || RETIRED.indexOf(rel) >= 0 || RETIRED_BASE.some(function (r) { return path.basename(r) === path.basename(rel); }); }
 function take(relNoExt, preferSvg) {
   var exts = preferSvg ? ['.svg', '.webp', '.png'] : ['.webp', '.png', '.jpg'];
   for (var i = 0; i < exts.length; i++) {
@@ -61,24 +72,29 @@ var out = {
   board: {
     bg: take('board/board_bg'), bgSmall: take('board/board_bg_1280x720'), size: M.board.size,
     zones: boxes(M.board.zones), ui: Object.assign(boxes(M.board.ui_boxes), boxes(M.board.overlay_boxes)), overlayIds: Object.keys(M.board.overlay_boxes || {}), hierarchy: M.board.hierarchy,
-    plates: {}, plateSlots: boxes(asset('board/zone_house.png').slots)
+    zoneStrips: {}  // v0.4: 40px label strips (zone width x 40) drawn at y722 under each zone's live text
   },
   dread: { track: take('dread/pressure_track'), size: asset('dread/pressure_track.png').size || [1400, 200], steps: [], label: null, tiles: [] },
-  questions: { layout: boxes(M.question_layout), bg: {}, icon: {} },
-  tokens: {}, portraits: {}, helps: {}, helpSlots: boxes((asset('companions/help_companion_1.png').slots) || {}),
-  icons: { colour: {}, mono: {} }, moons: [], dawn: null
+  tokens: {}, portraits: {},
+  icons: { colour: {}, mono: {} }, hours: [], dawn: null,
+  end: { size: (M.end_screens || {}).size || [1920, 1080], boxes: boxes((M.end_screens || {}).boxes), bg: {}, bgSmall: {}, titleColour: {} }
 };
 var HV = (L.variants || {}).hand;
 if (HV) out.card.hand = { boxes: boxes(HV.boxes), rollIconSlot: (HV.boxes.roll_icons || {}).slot || 110, rollIconMax: (HV.boxes.roll_icons || {}).max || 3, frame: { neutral: take('cards/card_frame_hand') }, panels: { neutral: take('cards/card_panels_hand') } };
 CATS.forEach(function (c) { if (HV) { out.card.hand.frame[c] = take('cards/card_frame_hand_' + c); out.card.hand.panels[c] = take('cards/card_panels_hand_' + c); } });
 CATS.forEach(function (c) { out.card.frame[c] = take('cards/card_frame_' + c); out.card.panels[c] = take('cards/card_panels_' + c); out.card.glyph[c] = take('cards/glyphs/category_' + c, true); });
 Object.keys(CARD_FILES).forEach(function (id) { out.cardArt[id] = CARD_FILES[id] ? take('cards/art/' + CARD_FILES[id]) : null; });
-['house', 'yard', 'treeline'].forEach(function (z) { out.board.plates[z] = take('board/zone_' + z); });
+['house', 'yard', 'treeline'].forEach(function (z) { out.board.zoneStrips[z] = take('board/zone_strip_' + z); });
+// v0.4 end screens: manifest end_screens.screens.<key>.result = win | lose_dread | lose_short
+Object.keys(((M.end_screens || {}).screens) || {}).forEach(function (k) {
+  var sc = M.end_screens.screens[k], rel = sc.file.replace(/\.(png|jpg|webp)$/, '');
+  out.end.bg[sc.result] = take(rel); out.end.bgSmall[sc.result] = take(rel + '_1280x720');
+  out.end.titleColour[sc.result] = /^paper/.test(sc.title_colour || '') ? 'paper' : 'ink';
+});
 var tr = asset('dread/pressure_track.png');
 out.dread.steps = (tr.step_boxes || tr.steps || []).map(function (b) { return { step: b.step, x: b.x, y: b.y, w: b.w, h: b.h }; });
 if (tr.label_box) out.dread.label = { x: tr.label_box.x, y: tr.label_box.y, w: tr.label_box.w, h: tr.label_box.h };
 for (var i = 0; i <= 6; i++) out.dread.tiles.push(take('dread/pressure_step_' + i));
-[['T1', 'being'], ['T2', 'companion'], ['T3', 'past']].forEach(function (q) { out.questions.bg[q[0]] = take('questions/question_' + q[1]); out.questions.icon[q[0]] = take('icons/question_' + q[1], true); });
 // Cast from manifest.cast: each key (pov, companion_1, companion_2) is a file prefix; SLOT_OF maps it to the engine slot.
 var SLOT_OF = { pov: 'POV', companion_1: 'C1', companion_2: 'C2' };
 var castKeys = Object.keys(M.cast || {}).filter(function (k) { return k !== 'status' && k !== 'lineup'; });
@@ -88,18 +104,17 @@ castKeys.forEach(function (k) {
   var slot = SLOT_OF[k]; if (!slot) { console.error('Unknown cast key in manifest: ' + k); process.exit(1); }
   out.cast.slots[slot] = { key: k, description: M.cast[k] };
   out.tokens[slot] = take('companions/' + k + '_token_256'); out.portraits[slot] = take('companions/' + k + '_256');
-  if (slot !== 'POV') out.helps[slot.toLowerCase()] = take('companions/help_' + k);
 });
-Object.keys(SLOT_OF).forEach(function (k) { if (castKeys.indexOf(k) < 0) console.warn('WARN cast slot not in manifest.cast: ' + k + ' (greybox)'); });
+if (!out.tokens.POV) console.warn('WARN no player token (companions/pov_token_256)');
 // icons: 'colour' = <id>_color where the artist made one (v0.3: stat icons now have colour versions), else the base file.
-var ICONS = { CARE: 'care', INSIGHT: 'insight', NERVE: 'nerve', STAR: 'star', pressure: 'pressure', progress: 'progress', bar: 'bar', barOnDoor: 'bar_on_door', action: 'action', deck: 'deck' };
+var ICONS = { CARE: 'care', INSIGHT: 'insight', STAR: 'star', clue: 'clue', pressure: 'pressure', progress: 'progress', bar: 'bar', barOnDoor: 'bar_on_door', action: 'action', deck: 'deck' };
 Object.keys(ICONS).forEach(function (k) {
   var col = fs.existsSync(path.join(src, 'icons/' + ICONS[k] + '_color.svg')) || fs.existsSync(path.join(src, 'icons/' + ICONS[k] + '_color.webp'));
   out.icons.colour[k] = take('icons/' + ICONS[k] + (col ? '_color' : ''), true);
   out.icons.mono[k] = fs.existsSync(path.join(src, 'icons/' + ICONS[k] + '_light.svg')) ? take('icons/' + ICONS[k] + '_light', true) : out.icons.colour[k];
 });
 out.icons.mono.barOnDoor = out.icons.mono.bar; // one-colour mode: plain bar instead of the coloured bar-on-door
-for (var n = 1; n <= 6; n++) out.moons.push(take('icons/moon_' + n, true));
+for (var n = 1; n <= 6; n++) out.hours.push(take('icons/hour_' + n, true)); // v0.4 hour counter: a candle burning down (moons retired)
 out.dawn = take('icons/dawn', true);
 // v0.3 The Approach (Ola, manifest "v0.3 The Approach + art-fit fixes"). Missing files render as greyboxes.
 var before = missing.length;

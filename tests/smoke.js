@@ -6,6 +6,7 @@
 'use strict';
 var assert = require('assert');
 var CONFIG = require('../config.js');
+CONFIG.v04.enabled = false; // this suite checks the v0.3.2 build (CONFIG.v04 off); v0.4: tests/v04-test.js
 var Engine = require('../game.js');
 var Stats = require('../stats.js');
 var TXT = require('../data/vn-text.js');

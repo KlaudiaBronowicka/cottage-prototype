@@ -2,22 +2,22 @@
 Overflowing boxes: none
 Card effect text on screen: hand (190px, hand variant) 9.8px, zoom 15.0px (artist note: min 14px)
 Card name on screen in hand: 10.1px
-HUD above the zones: 237 screen px (33.0% of the stage height)
+HUD above the zones: 227 screen px (31.5% of the stage height)
 Tokens: all inside their zone box and clear of the zone strip
-late_nights_banner (nights 5-6): fits; visit_warning: fits, Bar-saved text: fits; sky overlay on
+late_nights_banner (nights 5-6): fits; visit_warning: fits, Bar-saved text: OVERFLOW (needs 901px, has 840px); sky overlay on
 (a) questions_row: 47 screen px tall; Question text 12.7px fits (47 of 70 stage px) / 12.7px fits (47 of 70 stage px) / 12.7px fits (47 of 70 stage px)
 (b) zone label strips (stage y): house 722-762, yard 722-762, treeline 722-762; footprint ring ends ~y720 -> no strip clips the ring
-Next-event title on screen at the HUD size: 12.0px (hover zoom 300px wide)
+Next-event title on screen at the HUD size: 13.3px (hover zoom 300px wide)
 == viewport 1920x1080 (stage scale 1.000) ==
 Overflowing boxes: none
 Card effect text on screen: hand (190px, hand variant) 14.7px, zoom 15.0px (artist note: min 14px)
 Card name on screen in hand: 15.2px
-HUD above the zones: 356 screen px (33.0% of the stage height)
+HUD above the zones: 340 screen px (31.5% of the stage height)
 Tokens: all inside their zone box and clear of the zone strip
-late_nights_banner (nights 5-6): fits; visit_warning: fits, Bar-saved text: fits; sky overlay on
+late_nights_banner (nights 5-6): fits; visit_warning: fits, Bar-saved text: OVERFLOW (needs 901px, has 840px); sky overlay on
 (a) questions_row: 70 screen px tall; Question text 19.0px fits (47 of 70 stage px) / 19.0px fits (47 of 70 stage px) / 19.0px fits (47 of 70 stage px)
 (b) zone label strips (stage y): house 722-762, yard 722-762, treeline 722-762; footprint ring ends ~y720 -> no strip clips the ring
-Next-event title on screen at the HUD size: 18.1px (hover zoom 300px wide)
+Next-event title on screen at the HUD size: 19.9px (hover zoom 300px wide)
 
 == layout v2 (Ola, 2026-10-18), checked in the rendered game (screenshots 09, 10, 20, 24-29) - notes for Ola, by box name ==
   - All board-layout overrides the manifest covers are gone: event_card, late_nights_banner, visit_warning, hint_line, roll_tray (overlay), door / door_handle / bar_on_door / window (overlay) now come straight from the manifest. One override left: the night-start / visit "banner" (no manifest box; transient overlay at 460,410 1000x220 in the zone band).

@@ -1,12 +1,23 @@
-# The Cottage: encounter prototype (v0.3.1: The Approach, layout v2)
+# The Cottage: encounter prototype (v0.4: Stripped Core, layout v3)
 
 This is a browser prototype of the **cottage encounter**. It exists to test whether the card encounter is fun. It is **not** the real game, and the tech here is **not** the engine choice. That choice still needs Klaudia's sign-off.
 
 Sources: rules *Cottage Paper Prototype Kit v0.1* plus the approved **rule set v0.2** (Tomek's *Clarity Pass v0.2*, approved by Klaudia) and **v0.3 The Approach, Variant 1** (Presence track, face-up next event; Notion spec page 3fded9602b06819786a7e14c416bab93); VN and tutorial copy by the Narrative Writer (Zosia); art by the Concept Artist (Ola), *Wilcza Noc · Kolor*, prototype grade. See `CHANGELOG.md` for what changed.
 
+## v0.4 Stripped Core (default; `?v04=0` = the v0.3.2 build below)
+- **Play:** open `index.html`, read the one-screen intro, press Start. The goal is 5 Clues before dawn (6 Hours) without Dread reaching 6.
+- **Board:** House / Yard / Treeline, the Dread track, the Approach track (the creature steps 1 per Hour, +1 on Hours 5-6; at the Door it visits: Dread +1, unless a Bar stops it), the event of this Hour, the next event face up, the hour candle counter, and the clue counter (X / 5). There are no story, Questions or companions.
+- **Actions:** Move, Search, Comfort, Play a card, End hour. There is a 10-card deck (see `config.js → v04.deck`) and 8 events.
+- **Tutorial:** 10 coach steps over guided Hours 1-2 (safe rolls), then a handoff. "Skip tutorial" is in the top-right corner.
+- **End:** win / Dread hit 6 / Dawn came short, on Ola's end screens, with Play again / Play with tutorial and the run stats.
+- **URL:** `?v04=0|1`, `?presence=A|B` (direction; intro line 3 swaps), `?presence=off`, `?footprints=1` (fallback), `?late=`, `?seed=`, `?tutorial=1|0`.
+- **Config:** `CONFIG.v04` holds every v0.4 number and flag (`clueGoal`, `presence.*`, `fallbackPresence`, `tutorial`, `wardNeedsTarget`, `shortcutEitherWay`). Text: `data/ui-text.js → v04`.
+- **Tests:** `node tests/v04-test.js`; `NODE_PATH=<playwright-core>/node_modules node tests/ui-playwright-v04.js [chrome] [--shots]` (screenshots `screenshots/v04-*.png`). Sim: `node tools/sim-v04.js 5000 11 [--pyquirk]`. Art fit: `node tools/art-fit-v04.js`.
+- **Notes:** sim parity table, questions for Tomek, copy gaps and art-fit notes for Ola are in `docs/v04-notes.md`.
+
 ## How to run
 - **Play:** open `index.html` in a desktop browser (Chrome, Edge, Firefox, Safari; 1280×720 up to 1920×1080). No server, install or build step.
-- **Single file:** `dist/cottage-prototype.html` has all code **and art** inlined (~8.7 MB). Rebuild with `python3 tools/bundle.py`.
+- **Single file:** `dist/cottage-prototype.html` has all code **and art** inlined (~11.2 MB, v0.4 + v0.3.2). Rebuild with `python3 tools/bundle.py`.
 - **URL options:** `?seed=1234` · `?skin=A|B|C` (name sets) · `?tutorial=1|0` (force the guided first night on/off) · `?icons=mono` (one-colour icons) · `?terms=TERM_QUESTIONS:Secrets,TERM_DREAD:Fear` (try other names live) · `?layout=1` (draw every layout box over the art) · `?debug=1` · `?tester=Name` · **v0.3:** `?presence=off|track|token` and/or `A|B` (comma list, e.g. `?presence=track,B`; A = domowik, B = zmora) · `?late=overlay|swap|none` (nights 5-6 look).
 
 ## What's playable

@@ -4,6 +4,7 @@ var assert = require('assert');
 var Skin = require('../skin.js');
 var TXT = require('../data/vn-text.js');
 var CONFIG = require('../config.js');
+CONFIG.v04.enabled = false; // this suite checks the v0.3.2 build (CONFIG.v04 off); v0.4: tests/v04-test.js
 var S = TXT.SKINS;
 
 // 1) Specific cases

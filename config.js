@@ -7,7 +7,7 @@
  * Lines marked "RULED (Kostka 2026-10-18)" were spec gaps the Game Designer has ruled on.
  * ===================================================================== */
 var CONFIG = {
-  version: 'kit-v0.1 + rules v0.2 + v0.3.2 The Approach / build 5',
+  version: 'v0.4 Stripped Core (on kit-v0.1 + rules v0.2 + v0.3.2) / build 6',
 
   // ---------- Setup ----------
   startPressure: 0,          // pressure token starts here
@@ -157,6 +157,72 @@ var CONFIG = {
     doorLineCount: 3,           // visit lines per direction (data/ui-text.js); one is picked with the seeded RNG
     lateBoard: 'overlay'        // nights 5-6 look: 'overlay' = cross-fade the artist's sky_late_overlay over the board (default, Klaudia/Ola decision)
                                 //   'swap' = swap to board_bg_late · 'none' = no change. URL ?late=overlay|swap|none overrides.
+  },
+
+  // ---------- v0.4 "Stripped Core" (APPROVED direction, Klaudia via Tomek, 18 Oct 2026; spec: gdd/v04/encounter-v0.4.md) ----------
+  // enabled: true = v0.4 (default). false = the v0.3.2 build exactly (story, Questions, companions, Nights). URL ?v04=0|1 overrides.
+  // Each sub-flag below returns its piece to v0.3.2 when switched off. Tested combinations: all ON (v0.4) and enabled:false (v0.3.2).
+  v04: {
+    enabled: true,
+    noStory: true,          // no VN intro/outro/beats/spots/choices; the title shows the one-screen intro (Zosia) and starts straight on the board
+    noQuestions: true,      // no Questions HUD, no dawn spend; outcomes win / lose_dread / lose_short
+    noCompanions: true,     // no COMPANION tokens, no Help, no "pulled outside"; Comfort = Dread -1 and the creature back 1
+    noNerve: true,          // cards carry one boost icon: I = magnifier (+1 to Search), C = heart (+1 to Comfort)
+    turnName: 'hour',       // 'hour' = Hours everywhere (string table overrides in data/ui-text.js v04); 'night' = v0.3 wording
+    clueGoal: 5,            // [T] win: reach dawn with this many clues and Dread under pressureMax
+    hintsNight2: false,     // the old Night 2 hint line is gone
+    encounterBonus: null,   // RESERVED hook (not built, no-op): later generic story bonus, e.g. 'extraActionHour1' | 'extraCard'
+    // Presence pace: steps every Hour, +1 on Hours 5-6. Footprints OFF (fallback below).
+    presence: {
+      mode: 'track',
+      direction: null,      // null = neutral "the creature"; ?presence=A|B swaps in the domowik / zmora name and art (flavour only)
+      stepsPerHour: 1,
+      lateFromHour: 5, lateExtraSteps: 1,
+      footprints: false,    // true = fallback: footprints on footprintEvents, start on the Yard, stepsPerHour 0 (use fallbackPresence)
+      footprintEvents: ['footsteps', 'knocking', 'whispers', 'lights', 'gate', 'silence', 'handle'], // all but Cold Draught (fallback only)
+      start: 0, visitDread: 1, visitC1Out: 0, visitReturnTo: 0, barBlockReturnTo: 1, barSavesForVisit: true,
+      treelineSearchSteps: 1, searchPullCountsCards: true, comfortPushBack: 1,
+      offeringReturnTo: 0,  // Bread and Salt: back to the trees (Treeline), also in the footprint fallback where it starts on the Yard
+      eventOverrides: {}, offeringCard: null, lateStepNeedsFootprint: false
+    },
+    // ?footprints=1 applies this on top (Tomek's fallback row in the sim: same balance)
+    fallbackPresence: { footprints: true, start: 1, stepsPerHour: 0 },
+    // 10 generic cards. icons: I = magnifier (+1 to Search), C = heart (+1 to Comfort). One icon each: 5 magnifier, 5 heart.
+    deck: [
+      { id: 'lookCloser', name: 'Look Closer',    icons: ['I'], effect: 'searchAdjacent',          text: 'Search an adjacent area without moving.' },
+      { id: 'luckyFind',  name: 'Lucky Find',     icons: ['I'], effect: 'progress', value: 1,     text: '+1 clue.' },
+      { id: 'sharpEyes',  name: 'Sharp Eyes',     icons: ['I'], effect: 'torch', value: 1,        text: 'Your next Search this hour is 1 easier.' },
+      { id: 'deepBreath', name: 'Deep Breath',    icons: ['C'], effect: 'pressure', value: -1,    text: 'Dread -1.' },
+      { id: 'warmStove',  name: 'Warm Stove',     icons: ['C'], effect: 'pressure', value: -2,    text: 'Dread -2.' },
+      { id: 'bread',      name: 'Bread and Salt', icons: ['C'], effect: 'offering', value: -1,    text: 'Dread -1 and the creature goes back to the trees.' },
+      { id: 'bar',        name: 'Bar the Door',   icons: ['C'], effect: 'placeBar',               text: 'Bar the door: stops the next event or one visit. Max 1 Bar.' },
+      { id: 'ward',       name: 'Ward',           icons: ['C'], effect: 'pushBack', value: 2,     text: 'Push the creature back 2 steps.' },
+      { id: 'shortcut',   name: 'Shortcut',       icons: ['I'], effect: 'moveSearch',             text: '+1 move: move 1 area and Search there, as one action.' },
+      { id: 'rummage',    name: 'Rummage',        icons: ['I'], effect: 'draw', value: 2,         text: 'Draw 2 cards.' }
+    ],
+    // Card art: Ola's v0.4 delivery has art for all 10 cards (cards/art/<file>, mapped in tools/import-art.js); a missing file = placeholder in the category frame.
+    // 8 events, all Dread +1; three twists. extraIfOutside: +n more if you're outside the House.
+    events: [
+      { id: 'footsteps', name: 'Footsteps',       pressure: 1 },
+      { id: 'knocking',  name: 'Knocking',        pressure: 1 },
+      { id: 'whispers',  name: 'Whispers',        pressure: 1 },
+      { id: 'draught',   name: 'Cold Draught',    pressure: 1 },
+      { id: 'handle',    name: 'The Door Handle', pressure: 1 },
+      { id: 'lights',    name: 'Lights Fail',     pressure: 1, discardRandom: 1 },
+      { id: 'gate',      name: 'The Gate Creaks', pressure: 1, extraIfOutside: 1 },
+      { id: 'silence',   name: 'Silence',         pressure: 1, noEndDraw: true }
+    ],
+    // Tutorial: guided Hours 1-2 (10 steps, data/ui-text.js v04.onboarding), then a handoff, then tooltips only.
+    tutorial: {
+      guidedHours: 2,
+      events: ['footsteps', 'knocking', 'draught'],
+      hand: ['rummage', 'shortcut', 'bread', 'bar', 'deepBreath'],
+      safeRolls: true       // guided rolls never show a bad omen or a -1 (the lesson always works)
+    },
+    // GAP (Tomek): Ward with the creature already at the trees has nothing to push. true = can't be played then (simplest UX); false = playable, no effect
+    wardNeedsTarget: true,
+    // GAP (Tomek): Shortcut "move 1 area and Search there". true = move either way (spec: "1 zone either way"); the card's move ignores Treeline exposure until End hour like a normal move.
+    shortcutEitherWay: true
   },
 
   // ---------- UI action list (data-driven) ----------

@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4: Stripped Core (2026-10-18, Greg)
+Spec `gdd/v04/encounter-v0.4.md`. Everything sits behind `CONFIG.v04` (on by default); **`?v04=0` plays the v0.3.2 build**.
+- **Cut:** story/VN, Questions, companions, NERVE. **Night → Hour** everywhere (terms, HUD, log, tooltips, tutorial).
+- **Goal:** 5 Clues by dawn (6 Hours) with Dread under 6 (`v04.clueGoal`). There are 3 end screens: win, Dread hit 6, Dawn came short. Each has Play again and Play with tutorial.
+- **Creature (Approach track):** 1 step every Hour, +1 on Hours 5-6. A visit costs Dread +1 and sends it back to the Treeline. A Bar stops a visit (the Bar is held for a forecast visit, as in v0.3.1). Footprints are off, with `v04.fallbackPresence` as the config fallback (footprints on 7/8, start Yard, no base step). Direction neutral unless `?presence=A|B`.
+- **Deck of 10:** Look Closer, Lucky Find, Sharp Eyes, Deep Breath, Warm Stove, Bar the Door, Ward, Shortcut, Rummage, Bread and Salt. **8 events:** all Dread +1. Twists: the Gate (+1 more if you're outside), Lights (discard 1), Silence (no end-of-Hour draw).
+- **Tutorial:** 10 steps, verbatim copy. Guided Hours 1-2 with fixed events/hand and safe rolls, then a handoff modal. Skip tutorial sits in the corner.
+- **Intro:** Zosia's FINAL copy, verbatim. Line 3 swaps only for `?presence=A|B`; the Goal line is built from config + the string table.
+- **Art (Ola v0.4, layout v3):** re-imported (122 files). Additions: 10 card arts, hour candles, magnifier insight, clue icon, zone strips, 3 end screens, new boxes (hour counter, skip_tutorial, clue counter, coach in hint_line, tutorial_modal, hand for 6). Retired art is no longer loaded (moons, nerve, questions, companion tokens/portraits/help, zone plates). `tools/import-art.js` handles the new `retired` folder format. The v0.4 art-fit audit is `tools/art-fit-v04.js`.
+- **Sim:** `tools/sim-v04.js` ports Tomek's 3 bots onto the real engine (8 rows). It matches `sim_v04.py` within 2 points except 4 smart rows (Python Hour-6 forecast quirk; `--pyquirk` reproduces it). See `docs/v04-notes.md`.
+- **Stats:** separate v0.4 store (`cottageProto.runs.v04`) with v0.4 columns (result, clues, hours, visits, per-Hour line, tutorial skip step).
+- **Tests:** new `tests/v04-test.js` (14 groups) and `tests/ui-playwright-v04.js` (intro A/B/neutral, full tutorial, skip, Look Closer/Shortcut pick, 3 end screens, 0 console errors). The v0.3 suites run with v0.4 off; v0.3 screenshots are in `screenshots/v03/`.
+- Questions for Tomek, copy gaps and art-fit notes for Ola: `docs/v04-notes.md`.
+
 ## v0.3.2: Bread and Salt text templating (2026-10-18, Greg)
 - Tomek: tour step 4 keeps the creature name (domowik/zmora) as built.
 - Tomek: the Bread and Salt effect uses the same templating as every card: `{T.TERM_DREAD} −1 and {t.TERM_PRESENCE} goes back to the {t.TRACK_APPROACH_1}.` (real minus sign). Renders "Dread −1 and the domowik/zmora goes back to the Treeline."; with the Presence off, the generic term ("the Presence"); a Dread rename / `?terms=` reaches it. Text and Playwright tests updated (A, B, off, `?terms=TERM_DREAD:Fear`).

@@ -414,6 +414,153 @@ var UI_TEXT = {
     }
   },
 
+  // ---------- v0.4 "Stripped Core" (spec: gdd/v04/encounter-v0.4.md; used only while CONFIG.v04.enabled) ----------
+  // terms: merged over `terms` above (Night -> Hour everywhere; the neutral creature name; the two boost icons).
+  // overrides: replace the string at the same path. Everything else in this file stays as v0.3.2 and is used when v0.4 is off.
+  // [COPY GAP] marks text we wrote (minimal, neutral) where the spec has none: listed for Zosia/Tomek in the README.
+  v04: {
+    terms: {
+      TERM_NIGHT: 'hour', TERM_NIGHTS: 'hours', TERM_NEXT_NIGHT: 'Next hour',
+      ACT_END_TURN: 'End hour', ACT_END_ROUND: 'End hour',
+      TERM_PRESENCE: 'the creature',               // ?presence=A|B swaps in 'the domowik' / 'the zmora' (presence.dirs.*.terms)
+      STAT_I: 'magnifier', STAT_C: 'heart'          // boost icons: magnifier = +1 to Search, heart = +1 to Comfort (no NERVE in v0.4)
+    },
+    // Title / one-screen intro (Zosia, FINAL, verbatim; one paragraph per line). Line 3 swaps by direction only when ?presence=A|B is set.
+    intro: {
+      title: 'The Cottage',
+      lines: ['Your car died at the edge of the forest, and the only shelter is an empty cottage.',
+              'Your friends have gone for help. They won\'t be back until morning.',
+              '@creatureLine'],
+      creatureLine: {
+        neutral: 'Something is walking out by the trees. You can\'t fight it, but you can learn what it wants and keep it from the door.',
+        A: 'Something small is walking the edge of the house. You can\'t fight it, but you can learn what it wants and keep it from the door.',
+        B: 'Something is walking barefoot around the cottage. You can\'t fight it, but you can learn what it wants and keep it from the door.'
+      },
+      goal: 'Goal: Find {goal} {T.TERM_CLUES} before {t.TERM_DAWN} ({total} {t.TERM_NIGHTS}). Don\'t let {T.TERM_DREAD} reach {max}.' // numbers + terms from config / terms
+    },
+    // End screens (spec section 2, verbatim at the defaults; numbers from config)
+    end: {
+      // title + result_line (Ola's two end-screen boxes): read together they are the spec line verbatim
+      win:        { title: 'Dawn.', result: 'You made it, with {n} {t.TERM_CLUES}.' },
+      lose_dread: { title: '{T.TERM_DREAD} hit {max}.', result: 'The night broke.' },
+      lose_short: { title: 'Dawn came,', result: 'but you only found {n} of {goal} {t.TERM_CLUES}.' },
+      rowClues: '{T.TERM_CLUES}', rowDread: 'Final {t.TERM_DREAD}', rowHours: '{T.TERM_NIGHTS} played', rowVisits: 'Visits at the {t.TRACK_APPROACH_4} (stopped by a {t.TERM_BAR})', // [COPY GAP] row labels
+      playAgain: 'Play again', playAgainTip: 'A new game with a new shuffle.',
+      playTutorial: 'Play with tutorial', playTutorialTip: 'A new game with the guided first two {t.TERM_NIGHTS}.'
+    },
+    cards: { // [COPY GAP] flavour lines for the new generic cards are empty until Zosia writes them (Bar the Door / Warm Stove reuse the Chair / Stove Fire lines, same art)
+      lookCloser: { cat: 'clue',    name: 'Look Closer',    text: '{T.ACT_SEARCH} an adjacent area without moving.', flavour: '' },
+      luckyFind:  { cat: 'clue',    name: 'Lucky Find',     text: '+1 {t.TERM_CLUE}.', flavour: '' },
+      sharpEyes:  { cat: 'clue',    name: 'Sharp Eyes',     text: 'Your next {t.ACT_SEARCH} this {t.TERM_NIGHT} is 1 easier.', flavour: '' },
+      deepBreath: { cat: 'calm',    name: 'Deep Breath',    text: '{T.TERM_DREAD} −1.', flavour: '' },
+      warmStove:  { cat: 'calm',    name: 'Warm Stove',     text: '{T.TERM_DREAD} −2.', flavour: 'Feed it. Keep it ticking. Keep it bright.' },
+      bread:      { cat: 'calm',    name: 'Bread and Salt', text: '{T.TERM_DREAD} −1 and {t.TERM_PRESENCE} goes back to the trees.', flavour: '@dir:offeringAction' },
+      bar:        { cat: 'protect', name: 'Bar the Door',   text: 'Bar the door: stops the next event or one visit. Max 1 {t.TERM_BAR}.', flavour: 'Wedge it tight. If it holds till morning, it was a good chair.' },
+      ward:       { cat: 'protect', name: 'Ward',           text: 'Push {t.TERM_PRESENCE} back 2 steps.', flavour: '' },
+      shortcut:   { cat: 'utility', name: 'Shortcut',       text: '+1 move: move 1 area and {t.ACT_SEARCH} there, as one {t.TERM_ACTION}.', flavour: '' },
+      rummage:    { cat: 'utility', name: 'Rummage',        text: 'Draw 2 cards.', flavour: '' }
+    },
+    // the neutral creature (no direction set): [COPY GAP] one door line and the Bread and Salt flavour; no voice lines
+    neutralDir: {
+      label: 'neutral · the creature', terms: {},
+      howTease: '',
+      door: ['Something tries the handle, slowly. Then it lets go.'],
+      turnAway: { comfort: '', offering: '', bar: '' }, tease: {}, late: '', search: '',
+      offeringAction: 'Old manners. They still work.'
+    },
+    overrides: {
+      events: { knocking: 'Knocking', whispers: 'Whispers', draught: 'Cold Draught', lights: 'Lights Fail' },
+      eventEffects: {
+        footsteps: '{T.TERM_DREAD} +1.', knocking: '{T.TERM_DREAD} +1.', whispers: '{T.TERM_DREAD} +1.', draught: '{T.TERM_DREAD} +1.', handle: '{T.TERM_DREAD} +1.',
+        lights: '{T.TERM_DREAD} +1, and you lose a random card.',
+        gate: '{T.TERM_DREAD} +1, and +1 more if you\'re outside the {t.ZONE_HOUSE}.',
+        silence: '{T.TERM_DREAD} +1, and no card draw this {t.TERM_NIGHT}.'
+      },
+      hud: {
+        goal: 'Find {goal} {t.TERM_CLUES} before {t.TERM_DAWN}. Don\'t let {T.TERM_DREAD} reach {max}.',
+        goalTip: 'Find {goal} {t.TERM_CLUES} before {t.TERM_DAWN}. Don\'t let {T.TERM_DREAD} reach {max}. {T.TERM_DAWN} comes after {T.TERM_NIGHT} {total}.',
+        nightTip: '{T.TERM_NIGHT} {n} of {total}. {T.TERM_DAWN} after {T.TERM_NIGHT} {total}.',
+        dreadLabel: 'At {max}, you lose',
+        dreadTip: '{T.TERM_DREAD}: {n} of {max}. At {max}, you lose. It rises with every event, a visit at the {t.TRACK_APPROACH_4}, ending an {t.TERM_NIGHT} in the {t.ZONE_TREELINE}, and {t.TERM_OMEN}s. {T.ACT_COMFORT} and calm cards lower it.',
+        dreadBreakTip: 'At {max}, you lose.',
+        cluesTip: '{T.TERM_CLUES}: {n} of {goal}. Find {goal} before {t.TERM_DAWN} to win.',
+        clueGoal: '{T.TERM_CLUES}: {n} of {goal}',
+        eventTip: 'This {t.TERM_NIGHT}: {event}. {effect}',
+        tonight: 'This {t.TERM_NIGHT}'
+      },
+      board: {
+        tokenPOVTip: 'You. {T.ACT_MOVE} one area at a time.',
+        barTip: 'Barred. Stops the next event or one visit. If {t.TERM_PRESENCE} will reach the {t.TRACK_APPROACH_4} this {t.TERM_NIGHT}, the {t.TERM_BAR} is kept for the visit.'
+      },
+      actions: {
+        investigate: { label: '{T.ACT_SEARCH}', tip: '{T.ACT_SEARCH} the {zone}: {t.TERM_NEED} {need}, about {pct}%, +{gain} {#gain:TERM_CLUE:TERM_CLUES}. Add {t.STAT_I} cards for +1 each.' },
+        steady: { label: '{T.ACT_COMFORT}', tip: '{T.ACT_COMFORT}: {t.TERM_NEED} {need}, about {pct}%. Success: {t.TERM_DREAD} −1 (−2 on a strong success). Add {t.STAT_C} cards for +1 each.' }
+      },
+      cardUi: { iconTip: { I: 'Magnifier: +1 to a {T.ACT_SEARCH} {t.TERM_ROLL} if you add this card.', N: '', C: 'Heart: +1 to a {T.ACT_COMFORT} {t.TERM_ROLL} if you add this card.' } },
+      roll: { uses: 'Add {stat} cards: +1 each', parts: 'Base {base} + cards {icons}', strongComfort: 'Strong success! {T.TERM_DREAD} −1 more.' },
+      ui: {
+        buildTag: 'v0.4 · greybox playtest · placeholder art',
+        start: 'Start', startTip: 'Start {t.TERM_NIGHT} 1.',
+        tutorialLabel: 'Guided first two {t.TERM_NIGHTS}', tutorialFieldTip: 'The first two {t.TERM_NIGHTS} step by step, then you play the rest alone. Recommended the first time.',
+        tutorial: 'Replay tutorial', tutorialTip: 'Restart with the guided first two {t.TERM_NIGHTS}.',
+        statsSummary: 'Runs: {runs} · results {outcomes} · avg {t.TERM_CLUES} {avg} · avg final {t.TERM_DREAD} {dread}'
+      },
+      presence: { ui: {
+        trackTip: '{T.TERM_PRESENCE} is coming: {t.TRACK_APPROACH_1}, {t.TRACK_APPROACH_2}, {t.TRACK_APPROACH_3}, {t.TRACK_APPROACH_4}. It comes 1 step closer every {t.TERM_NIGHT}, and 2 on {t.TERM_NIGHTS} {late}–{total}. At the {t.TRACK_APPROACH_4}: {t.TERM_DREAD} +1, unless a {t.TERM_BAR} stops it.',
+        markerTip: '{T.TERM_PRESENCE}. You can\'t fight it. {T.ACT_COMFORT}, Bread and Salt, Ward or a {t.TERM_BAR} keep it away.',
+        lateBanner: 'The last {t.TERM_NIGHTS}. It moves faster.',
+        visitEffect: '{T.TERM_DREAD} +1.',
+        feedVisit: '{T.TERM_PRESENCE} reached the {t.TRACK_APPROACH_4}: {t.TERM_DREAD} +1',
+        cause: { footprint: 'footprints ({event})', hour: 'a new {t.TERM_NIGHT}', late: 'the last {t.TERM_NIGHTS}', searchPull: 'you searched the {t.ZONE_TREELINE}', comfortPush: '{T.ACT_COMFORT}',
+                 offering: '{card}', ward: '{card}', barHeld: 'the {t.TERM_BAR} held', visitDone: 'it leaves the door' },
+        howTitle: '{T.TERM_PRESENCE}',
+        howRules: [
+          '{T.TERM_PRESENCE} walks this track: {t.TRACK_APPROACH_1}, {t.TRACK_APPROACH_2}, {t.TRACK_APPROACH_3}, {t.TRACK_APPROACH_4}. It comes 1 step closer every {t.TERM_NIGHT}, and 2 steps on {t.TERM_NIGHTS} {late}–{total}. Searching the {t.ZONE_TREELINE} draws it 1 step closer.',
+          'If it reaches the {t.TRACK_APPROACH_4}: {t.TERM_DREAD} +1 and it goes back to the {t.TRACK_APPROACH_1}. A {t.TERM_BAR} stops the visit instead. If it will reach the {t.TRACK_APPROACH_4} this {t.TERM_NIGHT}, the {t.TERM_BAR} is kept for the visit.',
+          '{T.ACT_COMFORT} pushes it back 1 step, Ward 2 steps, and Bread and Salt sends it back to the trees.'
+        ]
+      } }
+    },
+    // [COPY GAP] How to play (v0.4): minimal neutral rules summary for Zosia/Tomek to replace
+    howToPlay: {
+      title: 'How to play',
+      body: [
+        'Find {goal} {t.TERM_CLUES} before {t.TERM_DAWN}, and don\'t let {t.TERM_DREAD} reach {max}. {T.TERM_DAWN} comes after {T.TERM_NIGHT} {total}.',
+        'Each {t.TERM_NIGHT} starts with an event: {t.TERM_DREAD} +1, and sometimes a twist. The next {t.TERM_NIGHT}\'s event is always face up. Then {t.TERM_PRESENCE} comes closer.',
+        'You get 2 {t.TERM_ACTIONS}, then {T.ACT_END_TURN}: {T.ACT_MOVE} 1 area; {T.ACT_SEARCH} for {t.TERM_CLUES}; {T.ACT_COMFORT} to lower {t.TERM_DREAD}; or {T.ACT_PLAY}. Ending an {t.TERM_NIGHT} in the {t.ZONE_TREELINE}: {t.TERM_DREAD} +1.',
+        '{T.ACT_SEARCH} and {T.ACT_COMFORT} need a {t.TERM_ROLL}. Before you {t.TERM_ROLL}, add cards with the matching icon: +1 each, and the card is used up. At the end of each {t.TERM_NIGHT} you draw a card.'
+      ],
+      glossaryTitle: 'Words',
+      glossary: [
+        ['{T.TERM_CLUES}', 'What you find by searching. You need {goal} by {t.TERM_DAWN}.'],
+        ['{T.TERM_DREAD}', 'Your danger meter, 0 to {max}. At {max}, you lose.'],
+        ['Play vs add to a {t.TERM_ROLL}', 'Every card can either be played for its effect (1 {t.TERM_ACTION}) or added to a {t.TERM_ROLL} for +1 (free). Never both.'],
+        ['Magnifier / heart', 'Magnifier cards add +1 to a {T.ACT_SEARCH}. Heart cards add +1 to {T.ACT_COMFORT}.'],
+        ['{T.TERM_BAR}', 'Stops the next event or one visit. Only one at a time.'],
+        ['{T.TERM_OMEN}', 'One die face in six. The {t.TERM_ROLL} fails and {t.TERM_DREAD} goes up by 1.']
+      ]
+    },
+    // Guided Hours 1-2 (spec section 6; coach text VERBATIM at the defaults, numbers/names templated so config and ?presence=A|B reach them).
+    // target: element ids to highlight; trayTarget: ids once the roll window is open. allow: live controls.
+    // await: 'roll:<cardId>' = roll with that card added, then Continue · 'move:<zoneId>' · 'play:<cardId>' · 'endTurn' · 'modal' (handoff) · none = Next.
+    onboarding: {
+      steps: [
+        { id: 'goal',     hour: 1, target: ['goalBanner', 'nightCounter'], text: 'Your goal: find {goal} {t.TERM_CLUES} before {t.TERM_DAWN}. {T.TERM_DAWN} comes after {total} {t.TERM_NIGHTS}. If {T.TERM_DREAD} reaches {max}, you lose.' },
+        { id: 'event',    hour: 1, target: ['nightEvent', 'dread'], text: 'Every {t.TERM_NIGHT} starts with an event. This one raised {T.TERM_DREAD} to {dread}. {T.TERM_DREAD} is your danger meter. Keep it low.' },
+        { id: 'creature', hour: 1, target: ['approach', 'nextEvent'], text: 'This is {t.TERM_PRESENCE}. You can\'t fight it. It comes one step closer every {t.TERM_NIGHT}. If it reaches the {t.TRACK_APPROACH_4}, {T.TERM_DREAD} goes up. The card on the right shows next {t.TERM_NIGHT}\'s event, so you can plan.' },
+        { id: 'search',   hour: 1, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:rummage', text: '{T.ACT_SEARCH} the {t.ZONE_HOUSE} for a {t.TERM_CLUE}. It\'s the safest place, but worth only 1 {t.TERM_CLUE}. You need 2. Add a card with a magnifier for +1, then {t.TERM_ROLL}. Cards you add are used up.' },
+        { id: 'move',     hour: 1, target: ['clues', 'act-move', 'zone-yard'], allow: ['act-move', 'zone-yard'], await: 'move:yard', text: 'You found a {t.TERM_CLUE}. Now move to the {t.ZONE_YARD}. It\'s worth 2 {t.TERM_CLUES} but harder to search. {T.TERM_PRESENCE} isn\'t close yet, so it\'s safe to go out.' },
+        { id: 'end',      hour: 1, target: ['act-end', 'deckPile'], allow: ['act-end'], await: 'endTurn', text: 'You\'ve used your 2 {t.TERM_ACTIONS} for this {t.TERM_NIGHT}. End the {t.TERM_NIGHT} and you\'ll draw a card.' },
+        { id: 'warning',  hour: 2, target: ['approach', 'visitWarn', 'nextEvent'], text: '{T.TERM_PRESENCE} is at the {t.TRACK_APPROACH_3}. Next {t.TERM_NIGHT} it reaches the {t.TRACK_APPROACH_4}, and {T.TERM_DREAD} will go up. You have 2 {t.TERM_ACTIONS}: use one to search and one to turn it away.' },
+        { id: 'search2',  hour: 2, target: ['act-investigate'], trayTarget: ['rollAdd', 'rollGo'], allow: ['act-investigate', 'tray'], await: 'roll:shortcut', text: '{T.ACT_SEARCH} the {t.ZONE_YARD} first while you\'re here. You need 3: add a magnifier card again.' },
+        { id: 'bread',    hour: 2, target: ['card-bread'], allow: ['card-bread'], await: 'play:bread', text: 'Now play Bread and Salt. It lowers {T.TERM_DREAD} and sends {t.TERM_PRESENCE} back to the trees. {T.ACT_COMFORT} and Bar the Door also keep it away.' },
+        { id: 'handoff',  hour: 2, target: [], await: 'modal', text: 'You\'re on your own for the last {left} {t.TERM_NIGHTS}. You need {more} more {t.TERM_CLUES}. Watch {T.TERM_DREAD} and {t.TERM_PRESENCE}, and hover over anything for a reminder.' }
+      ]
+    },
+    you: 'You', // the player's token label (no character names in v0.4)
+    rollNeedsCard: 'Add {card} to this {t.TERM_ROLL} first.' // [COPY GAP] tutorial nudge when the expected card isn't added
+  },
+
   // ---------- How to play (Clarity Pass §9.4, 153 words) ----------
   howToPlay: {
     title: 'How to play',

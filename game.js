@@ -39,16 +39,36 @@
     if (r.startZeroClues) cfg.startProgress = 0;
     if (r.chairForPierogi) cfg.deck = base.deck.map(function (c) { return c.id === 'pierogi' ? base.chairCard : c; });
     cfg.uiActions = (base.uiActions || []).filter(function (a) { return !(r.cutDrawAndHold && (a === 'draw' || a === 'holdDoor')); });
+    // v0.4 Stripped Core: CONFIG.v04.enabled swaps in the v0.4 deck, events, Presence pace, goal and tutorial; sub-flags off = v0.3.2 piece
+    var v = base.v04 || {}, V4 = cfg.v04on = !!v.enabled;
+    var url = base.presenceUrl || {}; // URL overrides from the UI (?presence=, ?late=, ?footprints=)
+    var pr = Object.assign({ mode: 'off' }, base.presence || {}, V4 ? v.presence || {} : {}, url);
+    if (V4) {
+      if (pr.footprints && v.fallbackPresence) pr = Object.assign(pr, v.fallbackPresence, url); // Tomek's fallback: footprints, start on the Yard, no base step
+      pr.lateFromNight = pr.lateFromHour || pr.lateFromNight;
+      cfg.deck = v.deck.slice(); cfg.events = v.events.slice();
+      cfg.clueGoal = v.clueGoal; cfg.startProgress = 0;
+      cfg.hintsNight2 = v.hintsNight2 != null ? v.hintsNight2 : cfg.hintsNight2;
+      cfg.encounterBonus = v.encounterBonus || null; // reserved hook: no-op
+      if (v.noQuestions) { cfg.threads = []; cfg.noQuestions = true; }
+      if (v.noCompanions) { cfg.noCompanions = true; cfg.exposureC1 = 0; pr.visitC1Out = 0; }
+      if (v.noStory) cfg.noStory = true;
+      cfg.turnName = v.turnName || 'hour';
+      var t = v.tutorial || {};
+      cfg.tutorialHand = t.hand || []; cfg.tutorialEvents = t.events || []; cfg.tutorialSafeRolls = !!t.safeRolls; cfg.tutorialGuidedHours = t.guidedHours || 0;
+      cfg.chairCard = null;
+    }
+    cfg.presence = pr;
     // v0.3 The Approach: presence.mode 'off' | 'track' | 'token' ('token' = Variant 2, parked: runs the track rules)
-    var pr = base.presence || { mode: 'off' }, mode = pr.mode || 'off';
+    var mode = pr.mode || 'off';
     cfg.presenceMode = mode === 'off' ? 'off' : 'track';
     cfg.presenceModeAsked = mode;
     if (cfg.presenceMode !== 'off') {
       var oc = pr.offeringCard;
       if (oc) cfg.deck = cfg.deck.map(function (c) { return c.id === oc.replaces ? oc : c; });
       var ov = pr.eventOverrides || {};
-      cfg.events = base.events.map(function (e) { var x = Object.assign({}, e, ov[e.id] || {}); x.footprint = (pr.footprintEvents || []).indexOf(e.id) >= 0; return x; });
-      if (pr.tutorialHand) cfg.tutorialHand = pr.tutorialHand;
+      cfg.events = cfg.events.map(function (e) { var x = Object.assign({}, e, ov[e.id] || {}); x.footprint = (!V4 || pr.footprints) && (pr.footprintEvents || []).indexOf(e.id) >= 0; return x; });
+      if (pr.tutorialHand && !V4) cfg.tutorialHand = pr.tutorialHand;
     }
     return cfg;
   }
@@ -83,6 +103,7 @@
       helps: { c1: { used: false, uses: 0 }, c2: { used: false, uses: 0 } },
       flags: { bond: opts.bond || 'C1', key: opts.key || 'SHARED', visited: opts.visited || ['3a', '3b', '3c'] },
       tutorial: !!opts.tutorial, tutorialRollRigged: false,
+      tutorialGuided: !!opts.tutorial && !!cfg.v04on && !!cfg.tutorialSafeRolls, // v0.4: guided rolls are safe until the handoff
       feed: [],                // structured, player-facing event feed: {round, type, delta, from, to, src}
       perRound: [],            // per-night logging (actions, plays, commits, helps, dread, positions)
       stats: { plays: 0, commits: 0, tests: 0, testSuccesses: 0, stars: 0, actions: {}, cardsPlayed: [], cardsCommitted: [], pressureByRound: [], progressByRound: [] },
@@ -117,11 +138,21 @@
       S.pressureMaxed = true;
       S.endReason = 'pressure';
       S.roundsPlayed = S.round;
-      S.c1 = zoneIds.length - 1; S.c1EverOutside = true; // narrative: COMPANION 1 walks out (confirmed: bond -1, escaped N)
-      log('EARLY END: pressure reached ' + cfg.pressureMax + '. COMPANION 1 walks out.', 'end');
+      if (!cfg.noCompanions) { S.c1 = zoneIds.length - 1; S.c1EverOutside = true; } // narrative: COMPANION 1 walks out (confirmed: bond -1, escaped N)
+      log('EARLY END: pressure reached ' + cfg.pressureMax + '.' + (cfg.noCompanions ? '' : ' COMPANION 1 walks out.'), 'end');
       enterAllocate();
     }
-    function enterAllocate() { S.endedAt = now(); S.phase = 'allocate'; S.actionsLeft = 0; snapshotRound(); }
+    function enterAllocate() { S.endedAt = now(); S.phase = 'allocate'; S.actionsLeft = 0; snapshotRound(); if (cfg.noQuestions) finishV04(); }
+    // v0.4: no dawn spend. win = dawn with clueGoal+ clues and Dread under max; lose_dread = Dread hit max; lose_short = dawn, too few clues
+    function finishV04() {
+      var outcome = S.pressureMaxed ? 'lose_dread' : S.progress >= cfg.clueGoal ? 'win' : 'lose_short';
+      S.outcome = outcome;
+      S.result = { outcome: outcome, clues: S.progress, clueGoal: cfg.clueGoal, finalPressure: S.pressure, hoursPlayed: S.roundsPlayed,
+        visits: S.presence ? S.presence.visits : 0, visitsBlocked: S.presence ? S.presence.blocked : 0, cardsPlayed: S.stats.cardsPlayed.slice(),
+        threadsResolved: [], progressAtEnd: S.progress, progressSpent: 0, progressLost: 0, escapedTogether: '', helpsUsed: [], c1BondChange: '', bondChoice: '', keyChoice: '', finalBondC1: '', finalBondC2: '', inserts: [] };
+      log('RESULT: ' + outcome + ' (' + S.progress + ' of ' + cfg.clueGoal + ' clues, Dread ' + S.pressure + ').', 'end');
+      S.phase = 'done';
+    }
     function snapshotRound() {
       S.stats.pressureByRound.push(S.pressure); S.stats.progressByRound.push(S.progress);
       var rs = S._roundStart || { actions: {}, plays: 0, commits: 0, helps: 0 }, acts = {};
@@ -180,15 +211,16 @@
       var line = copyRng.int(PR.doorLineCount || 1);
       P.lastVisit = { round: S.round, blocked: false, line: line };
       S.feed.push({ round: S.round, type: 'visit', line: line, src: src || {} });
-      log('VISIT at the Door: Dread +' + PR.visitDread + ', COMPANION 1 pulled outward.', 'bad');
-      moveC1(PR.visitC1Out, 'Presence visit', { type: 'visit' });
+      log('VISIT at the Door: Dread +' + PR.visitDread + (PR.visitC1Out ? ', COMPANION 1 pulled outward.' : '.'), 'bad');
+      if (PR.visitC1Out) moveC1(PR.visitC1Out, 'Presence visit', { type: 'visit' });
       changePressure(PR.visitDread, 'Presence visit', { type: 'visit' });
       if (!ended()) setPresence(PR.visitReturnTo, { type: 'visitDone' });
     }
     function presenceNightSteps(ev, night) {
+      var base = PR.stepsPerHour || 0; // v0.4: it steps every Hour (0 in v0.3 and in the footprint fallback)
       var fp = ev && ev.footprint ? (PR.footprintSteps || 1) : 0;
       var late = night >= PR.lateFromNight && (!PR.lateStepNeedsFootprint || fp) ? (PR.lateExtraSteps || 0) : 0;
-      return { footprint: fp, late: late, total: fp + late };
+      return { base: base, footprint: fp, late: late, total: base + fp + late };
     }
 
     function gainProgress(n, why, src) { S.feed.push({ round: S.round, type: 'progress', delta: n, from: S.progress, to: S.progress + n, src: src || {} }); S.progress += n; S.progressEarned += n; log('+' + n + ' progress (' + why + '). Total ' + S.progress + '.', 'good'); }
@@ -208,8 +240,9 @@
       S.events = rng.shuffle(cfg.events.map(function (e) { return e.id; }));
       if (S.tutorial) { // guided Night 1 (Clarity Pass 9.3): fixed first event and fixed cards in the starting hand
         (cfg.tutorialHand || []).slice().reverse().forEach(function (id) { var i = S.deck.indexOf(id); if (i >= 0) { S.deck.splice(i, 1); S.deck.unshift(id); } });
-        var ei = S.events.indexOf(cfg.tutorialEvent); if (ei >= 0) { S.events.splice(ei, 1); S.events.unshift(cfg.tutorialEvent); }
-        log('Tutorial: fixed first event (' + cfg.tutorialEvent + ') and starting cards (' + (cfg.tutorialHand || []).join(', ') + ').');
+        var tev = cfg.tutorialEvents || [cfg.tutorialEvent]; // v0.4: Hours 1-3 fixed (Footsteps, Knocking, Cold Draught)
+        tev.slice().reverse().forEach(function (id) { var ei = S.events.indexOf(id); if (ei >= 0) { S.events.splice(ei, 1); S.events.unshift(id); } });
+        log('Tutorial: fixed events (' + tev.join(', ') + ') and starting cards (' + (cfg.tutorialHand || []).join(', ') + ').');
       }
       log('Seed ' + seed + '. Bond: ' + S.flags.bond + ', key: ' + S.flags.key + '. Pressure ' + S.pressure + ', progress ' + S.progress + '.');
       drawCards(cfg.startingHand, 'starting hand');
@@ -246,7 +279,7 @@
       if (PON && !ended()) {
         var st = presenceNightSteps(ev, S.round);
         S.lastEvent.steps = st;
-        if (st.total) presenceStep(st.total, { type: st.footprint ? 'footprint' : 'late', id: ev.id, late: st.late });
+        if (st.total) presenceStep(st.total, { type: st.footprint ? 'footprint' : st.base ? 'hour' : 'late', id: ev.id, late: st.late });
       }
     }
     function resolveEvent(ev, barHeld) {
@@ -267,6 +300,7 @@
       }
       if (ev.noEndDraw) S.silence = true;
       if (ev.pressure) changePressure(ev.pressure, ev.name, { type: 'event', id: ev.id });
+      if (ev.extraIfOutside && S.pov > 0) changePressure(ev.extraIfOutside, ev.name + ' (outside)', { type: 'event', id: ev.id, outside: true }); // v0.4 The Gate Creaks
     }
 
     function endRound() {
@@ -288,6 +322,7 @@
         log('DAWN after round ' + S.round + '.', 'end');
         S.endedAt = now();
         S.phase = 'allocate';
+        if (cfg.noQuestions) finishV04();
         return;
       }
       startRound();
@@ -325,7 +360,10 @@
       commits.forEach(function (id) { S.hand.splice(S.hand.indexOf(id), 1); S.discard.push(id); S.stats.commits++; S.stats.cardsCommitted.push(id); });
       helps.forEach(function (w) { S.helps[w].used = true; S.helps[w].uses++; });
       var roll = forcedRoll || (rng.int(6) + 1);
-      if (!forcedRoll && S.tutorial && !S.tutorialRollRigged) { // guided Night 1: the first roll succeeds if it can (not shown to the player)
+      if (!forcedRoll && S.tutorialGuided) { // v0.4 guided Hours: no bad omen and no -1 (a safe face, still seeded)
+        var safe = []; for (var sf = 1; sf <= cfg.testBag.length; sf++) { var stk = cfg.testBag[sf - 1]; if (stk !== 'STAR' && stk >= 0) safe.push(sf); }
+        if (cfg.testBag[roll - 1] === 'STAR' || cfg.testBag[roll - 1] < 0) roll = safe[rng.int(safe.length)];
+      } else if (!forcedRoll && S.tutorial && !S.tutorialRollRigged && !cfg.v04on) { // guided Night 1: the first roll succeeds if it can (not shown to the player)
         S.tutorialRollRigged = true;
         for (var fr = 1; fr <= cfg.testBag.length; fr++) { var ft = cfg.testBag[fr - 1]; if (ft !== 'STAR' && pv.preDraw + ft >= difficulty) { roll = fr; break; } }
       }
@@ -412,7 +450,7 @@
         if (r.success && !ended()) {
           // Comfort/Steady: EVERY success lowers pressure (steadyPressureRelief) and calls COMPANION 1 one zone in;
           // a strong success lowers it by strongSteadyBonus more. (Matches the v0.2 sim fix.)
-          moveC1(-1, 'Steady', { type: 'comfort' });
+          if (!cfg.noCompanions) moveC1(-1, 'Steady', { type: 'comfort' });
           changePressure(-(cfg.steadyPressureRelief + (r.strong ? cfg.strongSteadyBonus : 0)), 'Steady' + (r.strong ? ', strong' : ''), { type: 'comfort', strong: r.strong });
           // v0.3: a Comfort success also turns the Presence back (not past the start)
           if (PON && !ended() && setPresence(S.presence.pos - PR.comfortPushBack, { type: 'comfortPush' })) S.presence.comfortPushes++;
@@ -442,6 +480,8 @@
         if (c.effect === 'investigateYardFromHouse' && cfg.photosRequiresHouse && S.pov !== 0) return { ok: false, why: 'POV must be in the House' };
         if (c.effect === 'readyHelp' && cfg.pierogiNeedsUsedHelp && !S.helps.c1.used && !S.helps.c2.used) return { ok: false, why: 'no Help has been used yet' };
         if (c.effect === 'placeBar' && !cfg.barsStack && S.bars > 0) return { ok: false, why: 'a Bar is already down (max 1)' };
+        if (c.effect === 'pushBack' && cfg.v04 && cfg.v04.wardNeedsTarget && (!PON || S.presence.pos <= 0)) return { ok: false, why: 'nothing to push back' };
+        if (c.effect === 'offering' && !PON) return { ok: true };
         return { ok: true };
       },
       /** play(cardId, params) params: {zone, commits, helps, helpToReady, roll} */
@@ -450,6 +490,11 @@
         var can = api.canPlay(id); if (!can.ok) return err('Cannot play: ' + can.why);
         var c = card(id);
         var bc = badCommits(p, id); if (bc) return err(bc);
+        if (c.effect === 'searchAdjacent' || c.effect === 'moveSearch') { // v0.4 Look Closer / Shortcut: the target must be next to you
+          if (p.zone == null) p = Object.assign({}, p, { zone: S.pov < zoneIds.length - 1 ? S.pov + 1 : S.pov - 1 });
+          if (Math.abs(p.zone - S.pov) !== 1 || p.zone < 0 || p.zone >= zoneIds.length) return err('Pick an area next to you.');
+          if (c.effect === 'moveSearch' && cfg.v04 && !cfg.v04.shortcutEitherWay && p.zone < S.pov) return err('Shortcut only moves outward.');
+        }
         spend('play');
         S.hand.splice(S.hand.indexOf(id), 1); S.discard.push(id);
         S.stats.plays++; S.stats.cardsPlayed.push(id);
@@ -473,9 +518,17 @@
             else log('No used Help to ready.');
             break;
           case 'offering': // v0.3 Bread and Salt: Dread -1 and the Presence goes back to the start
-            S.presence.offerings++;
+            if (S.presence) S.presence.offerings++;
             changePressure(c.value, c.name, { type: 'card', id: c.id });
-            if (!ended()) { if (!setPresence(PR.start || 0, { type: 'offering', id: c.id })) S.feed.push({ round: S.round, type: 'presence', delta: 0, from: S.presence.pos, to: S.presence.pos, src: { type: 'offering', id: c.id } }); }
+            if (!ended() && PON) { if (!setPresence(PR.offeringReturnTo != null ? PR.offeringReturnTo : (PR.start || 0), { type: 'offering', id: c.id })) S.feed.push({ round: S.round, type: 'presence', delta: 0, from: S.presence.pos, to: S.presence.pos, src: { type: 'offering', id: c.id } }); }
+            break;
+          case 'searchAdjacent': res.test = doInvestigate(p.zone, c.name, p.commits, p.helps, p.roll, true); break; // v0.4 Look Closer
+          case 'moveSearch': // v0.4 Shortcut: move 1 area and Search there, one action
+            log('Move: POV ' + zoneName(S.pov) + ' → ' + zoneName(p.zone) + ' (' + c.name + ').');
+            S.pov = p.zone; if (p.zone > 0) S.povLeftHouse = true;
+            res.test = doInvestigate(p.zone, c.name, p.commits, p.helps, p.roll, true); break;
+          case 'pushBack': // v0.4 Ward: the creature back n steps, not past the Treeline
+            if (PON) setPresence(S.presence.pos - c.value, { type: 'ward', id: c.id });
             break;
           case 'c1InwardAndCalm': moveC1(-1, c.name, { type: 'card', id: c.id }); changePressure(c.value, c.name, { type: 'card', id: c.id }); break;
           default: log('Unknown effect ' + c.effect, 'warn');
@@ -490,7 +543,7 @@
       },
       discardDown: discardDown,
       /** the player skipped the guided Night 1: stop any tutorial rigging */
-      endTutorial: function () { if (S.tutorial) { S.tutorialSkipped = !S.tutorialRollRigged; S.tutorialRollRigged = true; log('Tutorial closed.'); } },
+      endTutorial: function () { if (S.tutorial) { S.tutorialSkipped = !S.tutorialRollRigged; S.tutorialRollRigged = true; S.tutorialGuided = false; log('Tutorial closed.'); } },
 
       // ---------- Scoring ----------
       escapedTogether: function () { return !S.pressureMaxed && S.c1 === 0; },

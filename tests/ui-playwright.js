@@ -1,4 +1,6 @@
-/* Browser click-through test (not needed to play). Needs playwright-core + Chrome:
+/* v0.3.2 LEGACY click-through: every page load adds ?v04=0 (CONFIG.v04 off = the v0.3.2 build), screenshots go to screenshots/v03/.
+ * The v0.4 click-through is tests/ui-playwright-v04.js.
+ * Browser click-through test (not needed to play). Needs playwright-core + Chrome:
  *   NODE_PATH=/path/to/node_modules node tests/ui-playwright.js [chromePath] [--shots]
  * - guided Night 1 end to end (coach steps, locked controls, skip)
  * - 12 full runs through intro/quick setup → encounter (click + drag) → dawn → outro → results → stats
@@ -11,13 +13,14 @@ var { chromium } = require('playwright-core');
 var args = process.argv.slice(2), SHOTS = args.indexOf('--shots') >= 0;
 var exe = args.filter(function (a) { return a[0] !== '-'; })[0] || '/usr/bin/google-chrome';
 var root = path.resolve(__dirname, '..'), url = 'file://' + path.join(root, 'index.html');
-var shotDir = path.join(root, 'screenshots');
+var shotDir = path.join(root, 'screenshots', 'v03');
 function assert(c, m) { if (!c) throw new Error('ASSERT: ' + m); }
 
 (async function () {
   var browser = await chromium.launch({ executablePath: exe, headless: true });
   var ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, acceptDownloads: true });
   var page = await ctx.newPage();
+  var goto0 = page.goto.bind(page); page.goto = function (u, o) { return goto0(u + (u.indexOf('?') >= 0 ? '&' : '?') + 'v04=0', o); }; // legacy suite = v0.3.2
   var errors = [], BREAD_SEEN = {};
   page.on('pageerror', function (e) { errors.push('pageerror: ' + e.message); });
   page.on('console', function (m) { if (m.type() === 'error' || m.type() === 'warning') errors.push('console: ' + m.text()); });

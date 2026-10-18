@@ -1,4 +1,5 @@
-/* tools/sim-presence.js — rules sim for v0.3 The Approach vs presence OFF (rule set v0.2).
+/* tools/sim-presence.js — rules sim for v0.3 The Approach vs presence OFF (rule set v0.2). Runs with CONFIG.v04 OFF (v0.3.2 rules).
+ * The v0.4 sim (parity with gdd/sim/sim_v04.py) is tools/sim-v04.js.
  * Run: node tools/sim-presence.js [runs=5000]   → prints a table and writes tests/sim-presence-report.txt
  * Bots (simple, same as the smoke test's spirit):
  *   random  — any legal action, random cards added to rolls
@@ -50,7 +51,7 @@ function run(cfg, bot, seed) {
   var legal = g.legalAllocations().sort(function (a, b) { return b.length - a.length; }); g.allocate(legal[0]);
   return g;
 }
-function cfgFor(mode, save) { return Object.assign({}, CONFIG, { presence: Object.assign({}, CONFIG.presence, { mode: mode, barSavesForVisit: save }) }); }
+function cfgFor(mode, save) { return Object.assign({}, CONFIG, { v04: Object.assign({}, CONFIG.v04, { enabled: false }), presence: Object.assign({}, CONFIG.presence, { mode: mode, barSavesForVisit: save }) }); }
 var rows = [], out = [];
 // rows: [presence mode, bot, barSavesForVisit] (v0.3.1: flag ON is the default; OFF rows = v0.3 for comparison)
 var ROWS = [['off', 'smart', true], ['track', 'smart', true], ['track', 'aware', true], ['track', 'smart', false], ['track', 'aware', false],

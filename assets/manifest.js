@@ -5,7 +5,7 @@
  * Layout overrides/corrections live in data/board-layout.js.
  * ===================================================================== */
 var ASSET_MANIFEST = {
- "generatedBy": "tools/import-art.js from /workspace/cottage-art (2026-10-18 v0.3 The Approach + layout v2)",
+ "generatedBy": "tools/import-art.js from /workspace/cottage-art (2026-10-18 v0.4 Stripped Core)",
  "style": "Wilcza Noc · Kolor (locked)",
  "palette": {
   "ink": "#111111",
@@ -55,9 +55,9 @@ var ASSET_MANIFEST = {
    },
    "roll_icons": {
     "x": 64,
-    "y": 624,
+    "y": 640,
     "w": 80,
-    "h": 320
+    "h": 80
    },
    "effect": {
     "x": 180,
@@ -73,7 +73,7 @@ var ASSET_MANIFEST = {
    }
   },
   "rollIconSlot": 80,
-  "rollIconMax": 3,
+  "rollIconMax": 1,
   "categories": {
    "clue": "#C08A3E",
    "calm": "#4E7B74",
@@ -135,7 +135,7 @@ var ASSET_MANIFEST = {
     "roll_icons": {
      "x": 60,
      "y": 884,
-     "w": 330,
+     "w": 110,
      "h": 110
     },
     "roll_label": {
@@ -146,7 +146,7 @@ var ASSET_MANIFEST = {
     }
    },
    "rollIconSlot": 110,
-   "rollIconMax": 3,
+   "rollIconMax": 1,
    "frame": {
     "neutral": "assets/art/cards/card_frame_hand.webp",
     "clue": "assets/art/cards/card_frame_hand_clue.webp",
@@ -177,7 +177,16 @@ var ASSET_MANIFEST = {
   "torch": "assets/art/cards/art/torch.webp",
   "phone": "assets/art/cards/art/phone_at_4.webp",
   "pierogi": null,
-  "bread": "assets/art/cards/art/bread_and_salt.webp"
+  "bread": "assets/art/cards/art/bread_and_salt.webp",
+  "lookCloser": "assets/art/cards/art/look_closer.webp",
+  "luckyFind": "assets/art/cards/art/lucky_find.webp",
+  "sharpEyes": "assets/art/cards/art/sharp_eyes.webp",
+  "deepBreath": "assets/art/cards/art/deep_breath.webp",
+  "warmStove": "assets/art/cards/art/warm_stove.webp",
+  "bar": "assets/art/cards/art/bar_the_door.webp",
+  "ward": "assets/art/cards/art/ward.webp",
+  "shortcut": "assets/art/cards/art/shortcut.webp",
+  "rummage": "assets/art/cards/art/rummage.webp"
  },
  "board": {
   "bg": "assets/art/board/board_bg.webp",
@@ -189,21 +198,21 @@ var ASSET_MANIFEST = {
   "zones": {
    "house": {
     "x": 30,
-    "y": 356,
+    "y": 340,
     "w": 650,
-    "h": 412
+    "h": 428
    },
    "yard": {
     "x": 680,
-    "y": 356,
+    "y": 340,
     "w": 740,
-    "h": 412
+    "h": 428
    },
    "treeline": {
     "x": 1420,
-    "y": 356,
+    "y": 340,
     "w": 470,
-    "h": 412
+    "h": 428
    }
   },
   "ui": {
@@ -216,13 +225,19 @@ var ASSET_MANIFEST = {
    "goal_banner": {
     "x": 450,
     "y": 10,
-    "w": 1020,
+    "w": 800,
     "h": 64
    },
    "night_counter": {
-    "x": 1490,
+    "x": 1270,
     "y": 10,
-    "w": 400,
+    "w": 450,
+    "h": 64
+   },
+   "skip_tutorial": {
+    "x": 1740,
+    "y": 10,
+    "w": 150,
     "h": 64
    },
    "dread_track": {
@@ -240,43 +255,37 @@ var ASSET_MANIFEST = {
    "event_card": {
     "x": 1280,
     "y": 82,
-    "w": 610,
+    "w": 400,
     "h": 152
    },
-   "questions_row": {
-    "x": 30,
-    "y": 242,
-    "w": 1500,
-    "h": 70
-   },
    "clue_counter": {
-    "x": 1550,
-    "y": 242,
-    "w": 340,
-    "h": 70
-   },
-   "late_nights_banner": {
-    "x": 30,
-    "y": 318,
-    "w": 560,
-    "h": 32
-   },
-   "visit_warning": {
-    "x": 600,
-    "y": 318,
-    "w": 1290,
-    "h": 32
+    "x": 1700,
+    "y": 82,
+    "w": 190,
+    "h": 152
    },
    "hint_line": {
     "x": 30,
-    "y": 772,
-    "w": 1300,
-    "h": 32
+    "y": 242,
+    "w": 1000,
+    "h": 90
+   },
+   "visit_warning": {
+    "x": 1050,
+    "y": 242,
+    "w": 840,
+    "h": 42
+   },
+   "late_nights_banner": {
+    "x": 1050,
+    "y": 290,
+    "w": 840,
+    "h": 42
    },
    "event_log": {
-    "x": 1350,
+    "x": 30,
     "y": 772,
-    "w": 540,
+    "w": 1860,
     "h": 32
    },
    "deck": {
@@ -288,104 +297,78 @@ var ASSET_MANIFEST = {
    "action_buttons": {
     "x": 150,
     "y": 808,
-    "w": 240,
+    "w": 260,
     "h": 262
    },
    "hand": {
-    "x": 400,
+    "x": 420,
     "y": 808,
-    "w": 986,
+    "w": 1190,
     "h": 266
    },
-   "help_companion_1": {
-    "x": 1396,
-    "y": 841,
-    "w": 160,
-    "h": 200
-   },
-   "help_companion_2": {
-    "x": 1562,
-    "y": 841,
-    "w": 160,
-    "h": 200
-   },
    "next_event_preview": {
-    "x": 1730,
-    "y": 820,
-    "w": 172,
-    "h": 241
+    "x": 1640,
+    "y": 808,
+    "w": 190,
+    "h": 266
    },
    "roll_tray": {
     "x": 460,
-    "y": 362,
+    "y": 340,
     "w": 1000,
-    "h": 400
+    "h": 460
+   },
+   "tutorial_modal": {
+    "x": 560,
+    "y": 380,
+    "w": 800,
+    "h": 360
    },
    "bar_on_door": {
     "x": 232,
-    "y": 416,
+    "y": 404,
     "w": 110,
     "h": 48
    },
    "door": {
     "x": 248,
-    "y": 357,
+    "y": 345,
     "w": 80,
     "h": 165
    },
    "door_handle": {
     "x": 286,
-    "y": 422,
+    "y": 410,
     "w": 40,
     "h": 40
    },
    "window": {
     "x": 392,
-    "y": 367,
+    "y": 355,
     "w": 44,
     "h": 86
    }
   },
   "overlayIds": [
    "roll_tray",
+   "tutorial_modal",
    "bar_on_door",
    "door",
    "door_handle",
    "window"
   ],
   "hierarchy": [
-   "row1 y10-74: goal_banner + night_counter (+ actions_left_end_turn)",
-   "row2 y82-234: dread_track + approach_track side by side, event_card (tonight)",
-   "row3 y242-312: questions_row + clue_counter",
-   "alerts y318-350: late_nights_banner (nights 5-6) + visit_warning",
-   "zones y356-768",
-   "hint_line + event_log y772-804",
-   "hand row y808-1074: deck, action_buttons, hand, help portraits, next_event_preview"
+   "row1 y10-74: actions + goal_banner + hour counter (night_counter) + skip_tutorial",
+   "row2 y82-234: dread_track + approach_track, event_card (this hour), clue_counter",
+   "row3 y242-332: hint_line (coach) + visit_warning / late_nights_banner",
+   "zones y340-768 (label strips y722-762)",
+   "event_log y772-804",
+   "hand row y808-1074: deck, action_buttons, hand, next_event_preview"
   ],
-  "plates": {
-   "house": "assets/art/board/zone_house.webp",
-   "yard": "assets/art/board/zone_yard.webp",
-   "treeline": "assets/art/board/zone_treeline.webp"
-  },
-  "plateSlots": {
-   "title": {
-    "x": 24,
-    "y": 240,
-    "w": 200,
-    "h": 30
-   },
-   "need_reward": {
-    "x": 24,
-    "y": 272,
-    "w": 432,
-    "h": 36
-   },
-   "markers": {
-    "x": 24,
-    "y": 24,
-    "w": 432,
-    "h": 120
-   }
+  "zoneStrips": {
+   "house": "assets/art/board/zone_strip_house.webp",
+   "yard": "assets/art/board/zone_strip_yard.webp",
+   "treeline": "assets/art/board/zone_strip_treeline.webp"
   },
   "bgLate": "assets/art/board/board_bg_late.webp",
   "bgLateSmall": "assets/art/board/board_bg_late_1280x720.webp",
@@ -464,78 +447,18 @@ var ASSET_MANIFEST = {
    "assets/art/dread/pressure_step_6.webp"
   ]
  },
- "questions": {
-  "layout": {
-   "art": {
-    "x": 75,
-    "y": 80,
-    "w": 600,
-    "h": 400
-   },
-   "question_text": {
-    "x": 70,
-    "y": 584,
-    "w": 610,
-    "h": 270
-   },
-   "cost": {
-    "x": 70,
-    "y": 880,
-    "w": 610,
-    "h": 110
-   },
-   "icon": {
-    "x": 315,
-    "y": 448,
-    "w": 120,
-    "h": 120
-   }
-  },
-  "bg": {
-   "T1": "assets/art/questions/question_being.webp",
-   "T2": "assets/art/questions/question_companion.webp",
-   "T3": "assets/art/questions/question_past.webp"
-  },
-  "icon": {
-   "T1": "assets/art/icons/question_being.svg",
-   "T2": "assets/art/icons/question_companion.svg",
-   "T3": "assets/art/icons/question_past.svg"
-  }
- },
  "tokens": {
-  "POV": "assets/art/companions/pov_token_256.webp",
-  "C1": "assets/art/companions/companion_1_token_256.webp",
-  "C2": "assets/art/companions/companion_2_token_256.webp"
+  "POV": "assets/art/companions/pov_token_256.webp"
  },
  "portraits": {
-  "POV": "assets/art/companions/pov_256.webp",
-  "C1": "assets/art/companions/companion_1_256.webp",
-  "C2": "assets/art/companions/companion_2_256.webp"
- },
- "helps": {
-  "c1": "assets/art/companions/help_companion_1.webp",
-  "c2": "assets/art/companions/help_companion_2.webp"
- },
- "helpSlots": {
-  "stats": {
-   "x": 32,
-   "y": 248,
-   "w": 120,
-   "h": 52
-  },
-  "text": {
-   "x": 28,
-   "y": 306,
-   "w": 264,
-   "h": 68
-  }
+  "POV": "assets/art/companions/pov_256.webp"
  },
  "icons": {
   "colour": {
    "CARE": "assets/art/icons/care_color.svg",
    "INSIGHT": "assets/art/icons/insight_color.svg",
-   "NERVE": "assets/art/icons/nerve_color.svg",
    "STAR": "assets/art/icons/star.svg",
+   "clue": "assets/art/icons/clue.svg",
    "pressure": "assets/art/icons/pressure.svg",
    "progress": "assets/art/icons/progress.svg",
    "bar": "assets/art/icons/bar_color.svg",
@@ -546,8 +469,8 @@ var ASSET_MANIFEST = {
   "mono": {
    "CARE": "assets/art/icons/care_light.svg",
    "INSIGHT": "assets/art/icons/insight_light.svg",
-   "NERVE": "assets/art/icons/nerve_light.svg",
    "STAR": "assets/art/icons/star.svg",
+   "clue": "assets/art/icons/clue.svg",
    "pressure": "assets/art/icons/pressure.svg",
    "progress": "assets/art/icons/progress.svg",
    "bar": "assets/art/icons/bar_light.svg",
@@ -556,29 +479,74 @@ var ASSET_MANIFEST = {
    "deck": "assets/art/icons/deck_light.svg"
   }
  },
- "moons": [
-  "assets/art/icons/moon_1.svg",
-  "assets/art/icons/moon_2.svg",
-  "assets/art/icons/moon_3.svg",
-  "assets/art/icons/moon_4.svg",
-  "assets/art/icons/moon_5.svg",
-  "assets/art/icons/moon_6.svg"
+ "hours": [
+  "assets/art/icons/hour_1.svg",
+  "assets/art/icons/hour_2.svg",
+  "assets/art/icons/hour_3.svg",
+  "assets/art/icons/hour_4.svg",
+  "assets/art/icons/hour_5.svg",
+  "assets/art/icons/hour_6.svg"
  ],
  "dawn": "assets/art/icons/dawn.svg",
+ "end": {
+  "size": [
+   1920,
+   1080
+  ],
+  "boxes": {
+   "title": {
+    "x": 460,
+    "y": 96,
+    "w": 1000,
+    "h": 120
+   },
+   "result_line": {
+    "x": 460,
+    "y": 222,
+    "w": 1000,
+    "h": 64
+   },
+   "buttons_row": {
+    "x": 600,
+    "y": 312,
+    "w": 720,
+    "h": 92
+   },
+   "play_again": {
+    "x": 610,
+    "y": 320,
+    "w": 340,
+    "h": 76
+   },
+   "play_with_tutorial": {
+    "x": 970,
+    "y": 320,
+    "w": 340,
+    "h": 76
+   }
+  },
+  "bg": {
+   "win": "assets/art/end/win.webp",
+   "lose_dread": "assets/art/end/dread.webp",
+   "lose_short": "assets/art/end/dawn_fail.webp"
+  },
+  "bgSmall": {
+   "win": "assets/art/end/win_1280x720.webp",
+   "lose_dread": "assets/art/end/dread_1280x720.webp",
+   "lose_short": "assets/art/end/dawn_fail_1280x720.webp"
+  },
+  "titleColour": {
+   "win": "ink",
+   "lose_dread": "paper",
+   "lose_short": "ink"
+  }
+ },
  "cast": {
-  "status": "confirmed by Tomek 2026-10-18",
+  "status": "v0.4: companions cut from the encounter (Tomek spec); companion tokens + Help portraits retired",
   "slots": {
    "POV": {
     "key": "pov",
-    "description": "Marta (shaved head, brick flannel), ring ochre"
-   },
-   "C1": {
-    "key": "companion_1",
-    "description": "teal raincoat, dark bob, ring teal"
-   },
-   "C2": {
-    "key": "companion_2",
-    "description": "glasses, mustard knit, owns the camera (Footprint Photos), ring slate"
+    "description": "Marta (shaved head, brick flannel), ring ochre: the player token (companions/pov_*, icons/pov)"
    }
   }
  },

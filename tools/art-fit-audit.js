@@ -2,7 +2,7 @@
  *   NODE_PATH=/path/to/node_modules node tools/art-fit-audit.js [chromePath]
  * Renders every card, Question card, zone plate, Help portrait and the Dread label with LIVE text in the
  * artist's boxes (assets/manifest.js) and reports any box whose text overflows, plus on-screen font sizes
- * at 1280x720 and 1920x1080. Writes tests/art-fit-report.txt. */
+ * at 1280x720 and 1920x1080. Writes tests/art-fit-report.txt. v0.3.2 build only (?v04=0); v0.4: tools/art-fit-v04.js. */
 'use strict';
 var path = require('path'), fs = require('fs');
 var { chromium } = require('playwright-core');
@@ -14,14 +14,14 @@ var root = path.resolve(__dirname, '..'), url = 'file://' + path.join(root, 'ind
   var out = [];
   for (var vp of [[1280, 720], [1920, 1080]]) {
     var p = await b.newPage({ viewport: { width: vp[0], height: vp[1] } });
-    await p.goto(url + '?seed=5&tutorial=0'); await p.click('#bSkip'); await p.click('#bGo'); await p.waitForTimeout(2800);
+    await p.goto(url + '?seed=5&tutorial=0&v04=0'); /* v0.3.2 build (the v0.4 audit is tools/art-fit-v04.js) */ await p.click('#bSkip'); await p.click('#bGo'); await p.waitForTimeout(2800);
     var res = await p.evaluate(function () {
       var rep = [], scale = document.getElementById('stage').getBoundingClientRect().width / 1920;
       function over(el) { var s = el.firstElementChild || el; return s.scrollHeight > el.clientHeight + 1 || s.scrollWidth > el.clientWidth + 1; }
       function fpx(el) { var s = el.firstElementChild || el; return parseFloat(getComputedStyle(s).fontSize); }
       // full-size cards (artist pixels) for every card id, in a test host
       var host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-5000px;top:0;display:flex;flex-wrap:wrap;width:4000px'; document.body.appendChild(host);
-      var ids = CONFIG.deck.map(function (c) { return c.id; }).concat(['chair', 'bread']).filter(function (x, i, a) { return a.indexOf(x) === i; });
+      var ids = window.__game.cfg.deck.map(function (c) { return c.id; }).concat(['bread'].filter(function (x) { return window.__game.card(x); })).filter(function (x, i, a) { return a.indexOf(x) === i; });
       return { scale: scale, ids: ids };
     });
     // render cards via the UI's own component (exposed for tests)

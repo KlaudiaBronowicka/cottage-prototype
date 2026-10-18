@@ -1,0 +1,67 @@
+v0.4 art-fit report (tools/art-fit-v04.js), stage 1920x1080 artist px unless "screen px"
+
+== viewport 1280x720 (stage scale 0.667) ==
+Card / next-event boxes overflowing: none
+Cards with no art file: none (all 10 delivered); cards in hand at start: 5
+HUD goalBanner: fits, text 16.0 screen px
+HUD nightCounter: fits, text 12.0 screen px
+HUD clues: fits, text 16.0 screen px
+HUD nightEvent: fits, text 14.0 screen px
+HUD eventLog: fits, text 10.7 screen px
+HUD nextEvent: fits, text 16.0 screen px
+HUD turnBox: fits, text 13.3 screen px
+HUD dread: fits, text 16.0 screen px
+HUD actionsBox: fits, text 15.3 screen px
+HUD deckPile: fits, text 16.0 screen px
+Zone strips (stage y): house 722-762 w650 art, yard 722-762 w740 art, treeline 722-762 w470 art; footprint ring ends ~y703 -> clear
+Zone strip art (natural px): house 650x40 ok, yard 740x40 ok, treeline 470x40 ok
+Tokens: You token inside its zone box and clear of the zone strip in all 3 zones
+Hour 5 late_nights_banner: fits; visit_warning: fits; sky_late_overlay on
+Coach step 1 (goal, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 2 (event, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 3 (creature, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 4 (search, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 5 (move, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 6 (end, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 7 (warning, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 8 (search2, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 9 (bread, hint_line): 90 of 90px fits, text 11.3 screen px
+Coach step 10 (handoff, tutorial_modal): 360 of 360px fits, text 13.3 screen px
+skip_tutorial button: fits
+End win (win_1280x720.webp): title fits 48px, result_line fits, play_again fits, play_with_tutorial fits; stats strip ends y1070
+End lose_dread (dread_1280x720.webp): title fits 48px, result_line fits, play_again fits, play_with_tutorial fits; stats strip ends y1070
+End lose_short (dawn_fail_1280x720.webp): title fits 48px, result_line fits, play_again fits, play_with_tutorial fits; stats strip ends y1070
+
+== viewport 1920x1080 (stage scale 1.000) ==
+Card / next-event boxes overflowing: none
+Cards with no art file: none (all 10 delivered); cards in hand at start: 5
+HUD goalBanner: fits, text 24.0 screen px
+HUD nightCounter: fits, text 18.0 screen px
+HUD clues: fits, text 24.0 screen px
+HUD nightEvent: fits, text 21.0 screen px
+HUD eventLog: fits, text 16.0 screen px
+HUD nextEvent: fits, text 24.0 screen px
+HUD turnBox: fits, text 20.0 screen px
+HUD dread: fits, text 24.0 screen px
+HUD actionsBox: fits, text 23.0 screen px
+HUD deckPile: fits, text 24.0 screen px
+Zone strips (stage y): house 722-762 w650 art, yard 722-762 w740 art, treeline 722-762 w470 art; footprint ring ends ~y703 -> clear
+Zone strip art (natural px): house 650x40 ok, yard 740x40 ok, treeline 470x40 ok
+Tokens: You token inside its zone box and clear of the zone strip in all 3 zones
+Hour 5 late_nights_banner: fits; visit_warning: fits; sky_late_overlay on
+Coach step 1 (goal, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 2 (event, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 3 (creature, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 4 (search, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 5 (move, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 6 (end, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 7 (warning, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 8 (search2, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 9 (bread, hint_line): 90 of 90px fits, text 17.0 screen px
+Coach step 10 (handoff, tutorial_modal): 360 of 360px fits, text 20.0 screen px
+skip_tutorial button: fits
+End win (win.webp): title fits 72px, result_line fits, play_again fits, play_with_tutorial fits; stats strip ends y1070
+End lose_dread (dread.webp): title fits 72px, result_line fits, play_again fits, play_with_tutorial fits; stats strip ends y1070
+End lose_short (dawn_fail.webp): title fits 72px, result_line fits, play_again fits, play_with_tutorial fits; stats strip ends y1070
+
+Console errors: 0

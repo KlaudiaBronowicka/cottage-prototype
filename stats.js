@@ -24,7 +24,16 @@
     // v0.3 The Approach: Presence logging (Tension Pass §9.11)
     'presenceMode', 'presenceDirection', 'presenceByNight', 'presenceVisits', 'presenceVisitsBlocked', 'barHeldForVisit', 'offeringsPlayed', 'comfortPushes', 'searchPulls', 'presenceSteps', 'presenceClosest'];
 
+  // v0.4 Stripped Core (spec section 8.16): result, clues, final Dread, hours played, visits, visits blocked, cards played by id,
+  // tutorial completed/skipped and the step where it was skipped. "Night" columns are named per Hour.
+  var COLUMNS_V04 = ['runId', 'finishedAt', 'build', 'seed', 'tester',
+    'result', 'clues', 'clueGoal', 'finalPressure', 'maxPressure', 'hoursPlayed', 'visits', 'visitsBlocked', 'barHeldForVisit',
+    'cardsPlayed', 'cardsCommitted', 'plays', 'commits', 'tutorial', 'tutorialSkippedAt',
+    'encounterSeconds', 'secondsPerHour', 'totalSeconds', 'actionCounts', 'unusedActions', 'tests', 'testSuccesses', 'stars', 'povLeftHouse',
+    'pressureByHour', 'cluesByHour', 'perHour', 'presenceMode', 'presenceDirection', 'presenceByHour', 'offeringsPlayed', 'comfortPushes', 'searchPulls', 'presenceSteps', 'presenceClosest'];
+
   function buildRecord(game, meta) {
+    if (game.cfg.noQuestions) return buildRecordV04(game, meta);
     var S = game.state, R = S.result, cfg = game.cfg, Pr = S.presence;
     var open = cfg.threads.map(function (t) { return t.id; }).filter(function (id) { return R.threadsResolved.indexOf(id) < 0; });
     var actions = 0; for (var k in S.stats.actions) actions += S.stats.actions[k];
@@ -61,6 +70,30 @@
     };
   }
 
+  function buildRecordV04(game, meta) {
+    var S = game.state, R = S.result, cfg = game.cfg, Pr = S.presence, actions = 0;
+    for (var k in S.stats.actions) actions += S.stats.actions[k];
+    return {
+      runId: meta.runId, finishedAt: new Date().toISOString(), build: cfg.version, seed: S.seed, tester: meta.tester || '',
+      result: R.outcome, outcome: R.outcome, clues: R.clues, clueGoal: R.clueGoal, finalPressure: R.finalPressure, maxPressure: S.maxPressureSeen,
+      hoursPlayed: R.hoursPlayed, endReason: S.endReason, visits: R.visits, visitsBlocked: R.visitsBlocked, barHeldForVisit: Pr ? Pr.barHeldForVisit : '',
+      cardsPlayed: S.stats.cardsPlayed.join(' '), cardsCommitted: S.stats.cardsCommitted.join(' '), plays: S.stats.plays, commits: S.stats.commits,
+      tutorial: meta.tutorial || (S.tutorial ? 'Y' : 'N'), tutorialSkippedAt: meta.tutorialSkippedAt || '',
+      encounterSeconds: meta.encounterSeconds, secondsPerHour: secondsPerRound(S), totalSeconds: meta.totalSeconds,
+      actionCounts: Object.keys(S.stats.actions).map(function (k) { return k + ':' + S.stats.actions[k]; }).join(' '),
+      unusedActions: S.roundsPlayed * cfg.actionsPerRound - actions, tests: S.stats.tests, testSuccesses: S.stats.testSuccesses, stars: S.stats.stars,
+      povLeftHouse: S.povLeftHouse ? 'Y' : 'N',
+      pressureByHour: S.stats.pressureByRound.join(' '), cluesByHour: S.stats.progressByRound.join(' '),
+      // one entry per Hour: h<hour>:<action counts>|p<plays>c<commits>|D<dread>|C<clues>|<pov>|P<creature>
+      perHour: (S.perRound || []).map(function (r) {
+        return 'h' + r.round + ':' + (Object.keys(r.actions).map(function (k) { return k + r.actions[k]; }).join('.') || '-') + '|p' + r.plays + 'c' + r.commits + '|D' + r.dread + '|C' + r.clues + '|' + r.pov + (r.presence != null ? '|P' + r.presence : '');
+      }).join(' '),
+      presenceMode: Pr ? Pr.mode : 'off', presenceDirection: Pr ? (meta.presenceDirection || '') : '',
+      presenceByHour: Pr ? Pr.byNight.join(' ') : '', offeringsPlayed: Pr ? Pr.offerings : '', comfortPushes: Pr ? Pr.comfortPushes : '', searchPulls: Pr ? Pr.searchPulls : '',
+      presenceSteps: Pr ? Pr.steps : '', presenceClosest: Pr ? Pr.closest : ''
+    };
+  }
+
   // seconds spent in each round (space-separated), from the engine's round start timestamps to the end of the encounter
   function secondsPerRound(S) {
     var t = S.roundStartedAt || [], out = [];
@@ -86,16 +119,17 @@
 
   function toJSON(runs) { return JSON.stringify({ exportedAt: new Date().toISOString(), runs: runs }, null, 2); }
   function csvCell(v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
-  function toCSV(runs) {
-    var lines = [COLUMNS.join(',')];
-    runs.forEach(function (r) { lines.push(COLUMNS.map(function (c) { return csvCell(r[c]); }).join(',')); });
+  function toCSV(runs, cols) {
+    cols = cols || COLUMNS;
+    var lines = [cols.join(',')];
+    runs.forEach(function (r) { lines.push(cols.map(function (c) { return csvCell(r[c]); }).join(',')); });
     return lines.join('\n') + '\n';
   }
   function summary(runs) {
     var s = { runs: runs.length, outcomes: {}, avgProgressEarned: 0, avgFinalPressure: 0, escapedY: 0, early: 0, threadRate: { T1: 0, T2: 0, T3: 0 }, plays: 0, commits: 0 };
     runs.forEach(function (r) {
       s.outcomes[r.outcome] = (s.outcomes[r.outcome] || 0) + 1;
-      s.avgProgressEarned += +r.progressEarned; s.avgFinalPressure += +r.finalPressure;
+      s.avgProgressEarned += +(r.progressEarned != null ? r.progressEarned : r.clues); s.avgFinalPressure += +r.finalPressure;
       if (r.escapedTogether === 'Y') s.escapedY++; if (r.endReason === 'pressure') s.early++;
       s.threadRate.T1 += +r.T1; s.threadRate.T2 += +r.T2; s.threadRate.T3 += +r.T3;
       s.plays += +r.plays; s.commits += +r.commits;
@@ -104,6 +138,6 @@
     return s;
   }
 
-  var Stats = { COLUMNS: COLUMNS, buildRecord: buildRecord, Store: Store, toJSON: toJSON, toCSV: toCSV, summary: summary };
+  var Stats = { COLUMNS: COLUMNS, COLUMNS_V04: COLUMNS_V04, buildRecord: buildRecord, Store: Store, toJSON: toJSON, toCSV: toCSV, summary: summary };
   if (typeof module !== 'undefined') module.exports = Stats; else root.Stats = Stats;
 })(this);

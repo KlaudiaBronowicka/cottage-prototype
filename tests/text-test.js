@@ -4,6 +4,7 @@
 'use strict';
 var assert = require('assert');
 var UT = require('../data/ui-text.js'), TXT = require('../data/vn-text.js'), Skin = require('../skin.js'), CONFIG = require('../config.js');
+CONFIG.v04.enabled = false; // this suite checks the v0.3.2 build (CONFIG.v04 off); v0.4: tests/v04-test.js
 function fmt(s, terms, skin) { // same grammar as ui.js fmt()
   return Skin.applySkin(String(s)
     .replace(/\{#(\w+):(\w+):(\w+)\}/g, function (m, n, a, b) { assert(terms[a] && terms[b], 'plural terms exist: ' + m); return terms[b]; })
@@ -55,8 +56,11 @@ console.log('ALL TEXT CHECKS PASSED');
 (function () {
   var fs = require('fs'), src = fs.readFileSync(__dirname + '/../assets/manifest.js', 'utf8'), AM = require('../assets/manifest.js');
   if (/thread|_retired/.test(src)) throw new Error('assets/manifest.js references a retired asset');
-  ['POV', 'C1', 'C2'].forEach(function (s) { if (!AM.cast || !AM.cast.slots[s]) throw new Error('cast slot missing from manifest: ' + s); });
-  console.log('ART MANIFEST CHECK PASSED (no retired assets; cast from manifest.cast)');
+  // v0.4 art (Ola layout v3): the cast is the player token only; moons, NERVE, Questions, companion tokens/portraits/Help and zone plates retired
+  if (!AM.cast || !AM.cast.slots.POV) throw new Error('cast slot missing from manifest: POV');
+  if (/moon_|nerve|question_|help_companion|companion_[12]|board\/zone_(house|yard|treeline)\./.test(src)) throw new Error('assets/manifest.js loads v0.4-retired art');
+  if (AM.hours.length !== 6 || Object.keys(AM.end.bg).length !== 3 || Object.keys(AM.board.zoneStrips).length !== 3) throw new Error('v0.4 art missing (hours / end screens / zone strips)');
+  console.log('ART MANIFEST CHECK PASSED (no retired assets; v0.4 hours, end screens, zone strips; player token only)');
 })();
 
 // v0.3 The Approach copy: both directions complete, verbatim against Zosia's file, door lines match config

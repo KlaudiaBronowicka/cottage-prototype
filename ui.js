@@ -7,14 +7,22 @@
 (function () {
   'use strict';
   var TXT = VN_TEXT, UT = UI_TEXT, A = ASSET_MANIFEST, BL = BOARD_LAYOUT;
+  // v0.4 art (Ola layout v3) retired the moons, Questions, Help portraits and zone plates: the v0.3.2 build falls back to greyboxes
+  if (!A.questions) A.questions = { layout: BL.legacy.questionLayout, bg: {}, icon: {} };
+  A.helps = A.helps || {}; A.helpSlots = A.helpSlots || BL.legacy.helpSlots; A.moons = A.moons || []; A.hours = A.hours || [];
+  A.board.plates = A.board.plates || {}; A.board.plateSlots = A.board.plateSlots || BL.legacy.plateSlots; A.board.zoneStrips = A.board.zoneStrips || {};
   var qs = new URLSearchParams(location.search);
-  // v0.3 The Approach: ?presence=off|track|token and/or A|B (comma-separated, e.g. ?presence=track,B) override CONFIG.presence
-  var PCFG = Object.assign({ mode: 'off' }, CONFIG.presence || {});
-  (qs.get('presence') || '').split(',').forEach(function (v) { v = v.trim(); if (/^(off|track|token)$/i.test(v)) PCFG.mode = v.toLowerCase(); else if (/^[AB]$/i.test(v)) PCFG.direction = v.toUpperCase(); });
-  if (/^(overlay|swap|none)$/.test(qs.get('late') || '')) PCFG.lateBoard = qs.get('late');
-  var cfg = Object.assign({}, CONFIG, { presence: PCFG });
+  // v0.4 Stripped Core: CONFIG.v04.enabled (default ON); ?v04=0 = the v0.3.2 build, ?v04=1 forces v0.4
+  var V4CFG = Object.assign({}, CONFIG.v04 || {}, { enabled: qs.get('v04') ? qs.get('v04') === '1' : !!(CONFIG.v04 && CONFIG.v04.enabled) });
+  // v0.3 The Approach: ?presence=off|track|token and/or A|B (comma-separated, e.g. ?presence=track,B) override the Presence config
+  // (v0.4: ?footprints=1 = Tomek's footprint fallback)
+  var PURL = {};
+  (qs.get('presence') || '').split(',').forEach(function (v) { v = v.trim(); if (/^(off|track|token)$/i.test(v)) PURL.mode = v.toLowerCase(); else if (/^[AB]$/i.test(v)) PURL.direction = v.toUpperCase(); });
+  if (/^(overlay|swap|none)$/.test(qs.get('late') || '')) PURL.lateBoard = qs.get('late');
+  if (V4CFG.enabled && qs.get('footprints') === '1') PURL.footprints = true;
+  var cfg = Object.assign({}, CONFIG, { v04: V4CFG, presenceUrl: PURL });
+  if (V4CFG.enabled) cfg.statsStorageKey = CONFIG.statsStorageKey.replace(/\.v1$/, '') + '.v04'; // v0.4 runs (and the tutorial-done flag) kept apart from v0.3 runs
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; // FX: show a single frame
-  var PDIR = (UT.presence.dirs[PCFG.direction] ? PCFG.direction : 'A'), PT = UT.presence.dirs[PDIR];
   var stage = document.getElementById('stage'), wrap = document.getElementById('stageWrap');
   var layer = document.getElementById('layer');           // screen-pixel layer: tooltip, zoom, toasts
   var dbg = document.getElementById('debug');
@@ -23,9 +31,13 @@
   var store = new Stats.Store(cfg.statsStorageKey);
   var TUT_KEY = cfg.statsStorageKey + '.tutorialDone';
   var ECFG = Engine.effectiveConfig(cfg);                // config with the rule flags applied (for the UI before a game exists)
+  var V4 = !!ECFG.v04on, PCFG = ECFG.presence;
+  // direction: v0.3 = A unless B is set; v0.4 = neutral "the creature" unless ?presence=A|B (or CONFIG.v04.presence.direction) is set
+  var PDIR = UT.presence.dirs[PCFG.direction] ? PCFG.direction : (V4 ? null : 'A');
+  var PT = PDIR ? UT.presence.dirs[PDIR] : UT.v04.neutralDir;
 
   // URL overrides: ?skin=A ?seed=1 ?debug=1 ?icons=mono ?tutorial=0|1 ?terms=TERM_QUESTIONS:Secrets,TERM_DREAD:Fear ?layout=1
-  var TERMS = Object.assign({}, UT.terms, ECFG.presenceMode !== 'off' ? PT.terms : {});
+  var TERMS = Object.assign({}, UT.terms, V4 ? UT.v04.terms : {}, ECFG.presenceMode !== 'off' ? PT.terms : {});
   (qs.get('terms') || '').split(',').forEach(function (p) { var i = p.indexOf(':'); if (i > 0) TERMS[p.slice(0, i).trim()] = p.slice(i + 1).trim(); });
   var ICON_STYLE = qs.get('icons') || cfg.iconStyle;
 
@@ -38,7 +50,7 @@
     choices: { bond: null, key: null, visited: [] },
     steps: [], stepIdx: 0, revealed: [],
     tray: null, moveMode: false, pinned: null, alloc: [], lastRound: 0, feedSeen: 0,
-    hints: cfg.hintsNight2, tut: null, tutInfo: null,
+    hints: ECFG.hintsNight2, tut: null, tutInfo: null,
     tStart: 0, tEncounter: 0, saved: false, runId: null, outroSteps: null, outroIdx: 0
   };
   if (qs.get('debug') === '1') dbg.classList.remove('hidden');
@@ -53,8 +65,9 @@
   function cap(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
   function term(k) { return TERMS[k] != null ? TERMS[k] : '⟦' + k + '⟧'; }
   /** fill a string-table template: {t.KEY} {T.KEY} {#n:SING:PLUR} {var} then character slots via skin.js */
+  function GV() { var G = U && U.game ? U.game.cfg : ECFG; return { max: G.pressureMax, goal: G.clueGoal, total: G.rounds, late: (G.presence || {}).lateFromNight }; } // config numbers every template may use
   function fmt(s, v) {
-    v = v || {};
+    v = Object.assign(GV(), v || {});
     s = String(s == null ? '' : s)
       .replace(/\{#(\w+):(\w+):(\w+)\}/g, function (m, n, a, b) { return term(+v[n] === 1 ? a : b); })
       .replace(/\{([tT])\.(\w+)\}/g, function (m, c, k) { var x = term(k); return c === 'T' ? cap(x) : x; })
@@ -65,9 +78,11 @@
   function dirs(html) { return html.replace(/\[([^\]]*)\]/g, '<em class="dir">$1</em>'); } // [stage direction] → italics
   function dig(o, path) { path.split('.').forEach(function (k) { o = o == null ? o : o[k]; }); return o; }
   function L(path) {
-    var o = PON() ? dig(UT.presence.overrides, path) : null; // v0.3 overrides while the Presence is on
+    var o = V4 ? dig(UT.v04.overrides, path) : null;          // v0.4 overrides
+    if (o == null && V4 && /^cards\./.test(path)) o = dig(UT.v04, path); // v0.4 card text
+    if (o == null && PON()) o = dig(UT.presence.overrides, path); // v0.3 overrides while the Presence is on
     if (o == null) o = dig(UT, path);
-    if (typeof o === 'string' && o.indexOf('@dir:') === 0) o = dig(PT, o.slice(5)); // direction-specific line
+    if (typeof o === 'string' && o.indexOf('@dir:') === 0) o = dig(PT, o.slice(5)); // direction-specific line (v0.4 neutral: UT.v04.neutralDir)
     if (o == null) { console.warn('ui-text missing: ' + path); return '⟦' + path + '⟧'; }
     return o;
   }
@@ -108,12 +123,12 @@
   // ---------- card component: art, panels, frame, glyph, then live text (artist layer order) ----------
   function cardHTML(id, o) {
     o = o || {};
-    var G = U.game, c = (G ? G.card(id) : null) || cfg.deck.concat([cfg.chairCard, PCFG.offeringCard || {}]).filter(function (x) { return x.id === id; })[0];
+    var G = U.game, c = (G ? G.card(id) : null) || ECFG.deck.concat(V4 ? [] : [cfg.chairCard, CONFIG.presence.offeringCard || {}]).filter(function (x) { return x && x.id === id; })[0];
     var V = o.variant === 'hand' && A.card.hand ? A.card.hand : null; // the artist's compact hand frame (v0.3 art-fit fix)
     var cat = catOf(id), B = V ? V.boxes : A.card.boxes, W = A.card.size[0], Hh = A.card.size[1];
     var frame = (V || A.card).frame[cat] || (V || A.card).frame.neutral, panels = (V || A.card).panels[cat] || (V || A.card).panels.neutral;
     var slot = V ? V.rollIconSlot : A.card.rollIconSlot, rmax = V ? V.rollIconMax : A.card.rollIconMax;
-    var art = A.cardArt[id];
+    var art = cardArt(id);
     var pb = function (k) { return pctBox(B[k], W, Hh); };
     var rollIcons = c.icons.slice(0, rmax).map(function (ic, i) {
       var b = V ? { x: B.roll_icons.x + i * (slot + 8), y: B.roll_icons.y, w: slot, h: slot } : { x: B.roll_icons.x, y: B.roll_icons.y + i * (slot + 8), w: slot, h: slot };
@@ -131,6 +146,8 @@
       (B.flavour ? '<div class="c-box c-flav" data-box="flavour" style="' + pb('flavour') + '"><span>' + X('cards.' + id + '.flavour') + '</span></div>' : '') +
       (o.extra || '') + '</div>';
   }
+  // card art from the manifest; none = placeholder in the category frame
+  function cardArt(id) { return A.cardArt[id] || null; }
   function cardTip(id) { return P('cardUi.tip', { effect: P('cards.' + id + '.text') }); }
 
   // ---------- Question card (full) ----------
@@ -170,6 +187,7 @@
 
   // ---------- TITLE ----------
   function renderTitle() {
+    if (V4 && ECFG.noStory) return renderTitleV04();
     U.screen = 'title'; closeZoom(); endCoach(true);
     var skins = Object.keys(TXT.SKINS).map(function (k) { return '<option value="' + k + '"' + (k === U.skin ? ' selected' : '') + '>' + (k === 'neutral' ? esc(P('ui.namesSlots')) : k + ' · ' + esc(TXT.SKINS[k].POV)) + '</option>'; }).join('');
     stage.innerHTML = bgHTML('dim') +
@@ -190,10 +208,33 @@
     on('bSkip', function () { readTitle(); renderQuickChoices(); });
     renderDebug();
   }
+  // v0.4: one screen, Zosia's intro (one paragraph per line; line 3 by direction only when one is set), then straight onto the board
+  function introLines() {
+    var I = UT.v04.intro;
+    return I.lines.map(function (l) { return l === '@creatureLine' ? (PDIR && I.creatureLine[PDIR]) || I.creatureLine.neutral : l; });
+  }
+  function renderTitleV04() {
+    U.screen = 'title'; closeZoom(); endCoach(true);
+    stage.innerHTML = bgHTML('dim') +
+      '<div class="title-panel v04" id="introPanel">' +
+        '<h1 id="introTitle">' + H(UT.v04.intro.title) + '</h1>' +
+        '<div class="intro" id="introText">' + introLines().map(function (l) { return '<p>' + H(l) + '</p>'; }).join('') +
+        '<p class="goal" id="introGoal">' + H(UT.v04.intro.goal) + '</p></div>' +
+        '<div class="form">' +
+          '<label' + tipA(P('ui.seedFieldTip')) + '>' + X('ui.seedLabel') + '<input id="inSeed" value="' + (U.seed != null ? U.seed : '') + '"></label>' +
+          '<label' + tipA(P('ui.testerTip')) + '>' + X('ui.testerLabel') + '<input id="inTester" value="' + esc(U.tester) + '"></label>' +
+          '<label class="chk"' + tipA(P('ui.tutorialFieldTip')) + '><input type="checkbox" id="inTut"' + (U.wantTutorial ? ' checked' : '') + '> ' + X('ui.tutorialLabel') + '</label>' +
+        '</div>' +
+        '<div class="btns"><button class="primary big" id="bStart"' + tipA(P('ui.startTip')) + '>' + X('ui.start') + '</button></div>' +
+        '<div class="buildtag">' + X('ui.buildTag') + ' · ' + esc(cfg.version) + '</div>' +
+      '</div>';
+    on('bStart', function () { readTitle(); startEncounter(); });
+    renderDebug();
+  }
   function readTitle() {
     var s = document.getElementById('inSeed').value.trim();
     U.seed = s ? (parseInt(s, 10) >>> 0) : newSeed();
-    U.skin = document.getElementById('inSkin').value;
+    if (document.getElementById('inSkin')) U.skin = document.getElementById('inSkin').value;
     U.tester = document.getElementById('inTester').value.trim();
     U.wantTutorial = document.getElementById('inTut').checked;
     U.choices = { bond: null, key: null, visited: [] };
@@ -317,7 +358,7 @@
   function G_() { return U.game; }
   function canAct() { var S = U.game.state; return S.phase === 'actions' && S.actionsLeft > 0; }
   function zoneIdx(id) { for (var i = 0; i < ECFG.zones.length; i++) if (ECFG.zones[i].id === id) return i; return -1; }
-  function band(p) { for (var i = 0; i < TXT.pressureBands.length; i++) { var b = TXT.pressureBands[i]; if (p >= b.min && p <= b.max) return fmt(b.text); } return ''; }
+  function band(p) { if (V4 && ECFG.noStory) return ''; for (var i = 0; i < TXT.pressureBands.length; i++) { var b = TXT.pressureBands[i]; if (p >= b.min && p <= b.max) return fmt(b.text); } return ''; }
   function evDef(id) { return U.game.cfg.events.filter(function (e) { return e.id === id; })[0]; }
   function oddsOf(stat, need, commits, helps) {
     var G = U.game, pv = G.previewTest(stat, need, commits || [], helps || []);
@@ -379,13 +420,13 @@
     var p = tokenPos(who), s = BL.tokenSize, src = A.tokens[who];
     return '<div class="token tok-' + who + '" id="tok-' + who + '" style="left:' + (p.x - s / 2) + 'px;top:' + (p.y - s / 2) + 'px;width:' + s + 'px;height:' + s + 'px"' + tipA(P('board.token' + who + 'Tip')) + '>' +
       (src ? '<img src="' + src + '" alt="" draggable="false">' : '<div class="gbtok">' + esc(Skin.speaker(who, names()).charAt(0)) + '</div>') +
-      '<div class="tok-name">' + esc(Skin.speaker(who, names())) + '</div></div>';
+      '<div class="tok-name">' + esc(V4 && who === 'POV' ? P('v04.you') : Skin.speaker(who, names())) + '</div></div>';
   }
 
   function renderEncounter() {
     var G = U.game, S = G.state, c = G.cfg;
     if (S.phase === 'allocate') { closeZoom(); return renderDawn(); }
-    if (S.phase === 'done') { closeZoom(); return startOutro(); }
+    if (S.phase === 'done') { closeZoom(); return V4 && G.cfg.noQuestions ? renderEndV04() : startOutro(); }
     var before = {}; ['POV', 'C1', 'C2'].forEach(function (w) { var e = document.getElementById('tok-' + w); if (e) before[w] = e.getBoundingClientRect(); });
     var a = canAct(), last = c.zones.length - 1;
     // zones
@@ -395,7 +436,7 @@
       return '<div class="zone' + (i === S.pov ? ' here' : '') + (canMove ? ' movable' : '') + (canMove && U.moveMode ? ' moveHint' : '') + '" id="zone-' + z.id + '" data-zone="' + i + '" data-ctl="zone-' + z.id + '" style="' + box(zb) + '"' +
         tipA(P('board.zoneTip.' + z.id, { need: need, gain: z.progress }) + (canMove ? ' ' + P('board.moveHere') + '.' : '')) + '>' +
         (canMove ? '<div class="moveTag">' + X('board.moveHere') + ' ▸</div>' : '') +
-        '<div class="zstrip" style="height:' + BL.zoneStripH + 'px"><span class="zname">' + esc(zoneName(z.id)) + '</span><span class="zbadge">' + statIcon('INSIGHT', { dark: true, notip: true }) + X('board.zoneBadge', { need: need, gain: z.progress }) + '</span></div></div>';
+        '<div class="zstrip' + (V4 && A.board.zoneStrips[z.id] ? ' art' : '') + '" style="height:' + BL.zoneStripH + 'px' + (V4 && A.board.zoneStrips[z.id] ? ';background-image:url(' + A.board.zoneStrips[z.id] + ')' : '') + '"><span class="zname">' + esc(zoneName(z.id)) + '</span><span class="zbadge">' + statIcon('INSIGHT', { dark: true, notip: true }) + X('board.zoneBadge', { need: need, gain: z.progress }) + '</span></div></div>';
     }).join('');
     var bar = S.bars ? '<div class="door" id="door" style="' + box(layoutBox('barOnDoor')) + '"' + tipA(barSavedNow() ? P('presence.ui.barTipSaved') : P('board.barTip')) + '>' + (PA('bar') && ICON_STYLE !== 'mono' ? '<img src="' + PA('bar') + '" alt="' + esc(P('board.bar')) + '">' : icon('barOnDoor', { alt: P('board.bar') })) + '</div>' : '';
     // top band
@@ -403,11 +444,12 @@
     var endLbl = P(c.rules && c.rules.endTurnButton ? 'actions.endTurn.label' : 'actions.endRound.label');
     var turn = '<div class="hud turn" id="turnBox" style="' + box(layoutBox('turn')) + '"><div class="aleft"' + tipA(P('hud.actionsLeftTip', { n: S.actionsLeft })) + '><span>' + X('hud.actionsLeft', { n: S.actionsLeft }) + '</span><span class="apips">' + pips + '</span></div>' +
       '<button id="act-end" data-ctl="act-end" class="primary endturn' + (S.actionsLeft === 0 && S.phase === 'actions' ? ' nudge' : '') + '"' + (S.phase === 'actions' ? '' : ' disabled') + tipA(endTurnTip()) + '>' + esc(endLbl) + ' ▸</button></div>';
-    var goal = '<div class="hud goal" id="goalBanner" style="' + box(layoutBox('goalBanner')) + '"' + tipA(P('hud.goalTip')) + '><span>' + X('hud.goal') + '</span>' +
+    var goal = '<div class="hud goal' + (V4 ? ' v04' : '') + '" id="goalBanner" style="' + box(layoutBox('goalBanner')) + '"' + tipA(P('hud.goalTip')) + '><span>' + X('hud.goal') + '</span>' +
       '<button id="btnMenu" class="menuBtn"' + tipA(P('ui.menuTip')) + '>☰ ' + X('ui.menu') + '</button></div>';
-    var moons = ''; for (var r = 1; r <= c.rounds; r++) moons += '<span class="moon' + (r === S.round ? ' now' : r < S.round ? ' past' : '') + '"' + tipA(P('hud.nightStepTip', { n: r })) + '>' + img(A.moons[Math.min(r, A.moons.length) - 1], 'ic', '') + (A.moons[r - 1] ? '' : '<span class="gb">' + r + '</span>') + '</span>';
+    var MI = V4 ? A.hours : A.moons; // v0.4: a candle burning down per Hour (icons/hour_1..6); v0.3: moons (retired art → numbers)
+    var moons = ''; for (var r = 1; r <= c.rounds; r++) moons += '<span class="moon' + (r === S.round ? ' now' : r < S.round ? ' past' : '') + '"' + tipA(P('hud.nightStepTip', { n: r })) + '>' + img(MI[Math.min(r, MI.length) - 1], 'ic', '') + (MI[r - 1] ? '' : '<span class="gb">' + r + '</span>') + '</span>';
     moons += '<span class="moon dawn"' + tipA(P('hud.dawnStepTip')) + '>' + (A.dawn ? img(A.dawn, 'ic', '') : '<span class="gb">☀</span>') + '</span>';
-    var night = '<div class="hud nightc" id="nightCounter" style="' + box(layoutBox('nightCounter')) + '"' + tipA(P('hud.nightTip', { n: S.round, total: c.rounds })) + '><div class="nlabel">' + X('hud.night', { n: S.round, total: c.rounds }) + '</div><div class="moons">' + moons + '</div></div>';
+    var night = '<div class="hud nightc' + (V4 ? ' v04' : '') + '" id="nightCounter" style="' + box(layoutBox('nightCounter')) + '"' + tipA(P('hud.nightTip', { n: S.round, total: c.rounds })) + '><div class="nlabel">' + X('hud.night', { n: S.round, total: c.rounds }) + '</div><div class="moons">' + moons + '</div></div>';
     // dread track
     var db = layoutBox('dread'), k2 = db.h / A.dread.size[1], tw = A.dread.size[0] * k2;
     var steps = A.dread.steps.map(function (s) {
@@ -420,14 +462,14 @@
       (lb ? '<div class="dlabel" data-box="dread.label_box" style="left:' + lb.x * k2 + 'px;top:' + lb.y * k2 + 'px;width:' + lb.w * k2 + 'px;height:' + lb.h * k2 + 'px"><span>' + X('hud.dreadTitle', { n: S.pressure, max: c.pressureMax }) + ' · ' + X('hud.dreadLabel', { max: c.pressureMax }) + '</span></div>' : '') + '</div></div>';
     // questions + clues
     var qb = layoutBox('questions');
-    var qs2 = '<div class="hud questions" id="questions" style="' + box(qb) + '">' + c.threads.map(function (th) {
+    var qs2 = c.noQuestions ? '' : '<div class="hud questions" id="questions" style="' + box(qb) + '">' + c.threads.map(function (th) {
       var have = Math.min(S.progress, th.cost), qp = ''; for (var i = 0; i < th.cost; i++) qp += '<span class="qpip' + (i < have ? ' on' : '') + '"></span>';
       return '<div class="qchip" id="q-' + th.id + '" data-q="' + th.id + '"' + tipA(P('hud.questionTip', { cost: th.cost })) + '>' +
         (A.questions.bg[th.id] ? '<img class="qbg" src="' + A.questions.bg[th.id] + '" alt="" draggable="false">' : '') +
         '<div class="qicon">' + (A.questions.icon[th.id] ? '<img src="' + A.questions.icon[th.id] + '" alt="">' : '<span class="gb">?</span>') + '</div>' +
         '<div class="qtxt"><div class="qs">' + X('questions.' + th.id) + '</div><div class="qcost">' + X('hud.questionProgress', { have: have, cost: th.cost }) + ' <span class="qpips">' + qp + '</span></div></div></div>';
     }).join('') + '</div>';
-    var clues = '<div class="hud clues" id="clues" style="' + box(layoutBox('clues')) + '"' + tipA(P('hud.cluesTip', { n: S.progress })) + '>' + icon('progress', { alt: '' }) + '<span class="cn">' + S.progress + '</span><span class="cl">' + esc(cap(term('TERM_CLUES'))) + '</span></div>';
+    var clues = '<div class="hud clues' + (c.noQuestions ? ' cgoal' : '') + '" id="clues" style="' + box(layoutBox('clues')) + '"' + tipA(P('hud.cluesTip', { n: S.progress })) + '>' + icon(V4 && A.icons.colour.clue ? 'clue' : 'progress', { alt: '' }) + '<span class="cn">' + S.progress + (c.noQuestions ? '<small>/' + c.clueGoal + '</small>' : '') + '</span><span class="cl">' + esc(cap(term('TERM_CLUES'))) + '</span></div>';
     // bottom: deck, actions, hand, helps, event
     var deck = '<div class="hud deck" id="deckPile" style="' + box(layoutBox('deck')) + '"' + tipA(P('hud.deckTip', { n: S.deck.length }) + ' ' + P('hud.discardTip', { n: S.discard.length })) + '>' +
       '<div class="pile' + (S.deck.length ? '' : ' empty') + '">' + icon('deck', { dark: true, alt: '' }) + '<span class="pn">' + S.deck.length + '</span></div><div class="dlbl">' + X('hud.deck', { n: S.deck.length }) + '<br>' + X('hud.discard', { n: S.discard.length }) + '</div></div>';
@@ -445,16 +487,16 @@
         (inDiscard ? '<button class="discardBtn" data-discard="' + id + '"' + tipA(P('cardUi.discardTip', { limit: c.handLimit })) + '>' + X('cardUi.discard') + '</button>' : '') + '</div>';
     }).join('');
     var handHead = inDiscard ? '<div class="handHead warn" style="left:' + hb.x + 'px;top:' + (hb.y - 210) + 'px;width:' + hb.w + 'px">' + X('cardUi.discardPrompt', { limit: c.handLimit }) + '</div>' : '';
-    var helps = ['c1', 'c2'].map(function (w) {
+    var helps = c.noCompanions ? '' : ['c1', 'c2'].map(function (w) {
       var used = S.helps[w].used, bonus = G.helpBonus(w), close = bonus === c.helpBonusBonded;
       var tip = P(w === 'c1' ? 'hud.helpTipC1' : 'hud.helpTipC2', { bonus: bonus, close: close ? P('hud.helpCloseNote', { bonus: bonus }) : '' });
       return '<div class="hud help' + (used ? ' used' : '') + '" id="help-' + w + '" style="' + box(layoutBox(w === 'c1' ? 'helpC1' : 'helpC2')) + '"' + tipA(tip) + '>' + (A.helps[w] ? '<img src="' + A.helps[w] + '" alt="" draggable="false">' : '<div class="gbhelp">' + esc(Skin.speaker(w.toUpperCase(), names())) + '</div>') +
         '<div class="hslot" data-box="help.text" style="' + pctBox(A.helpSlots.text, 320, 400) + '"><span><b>+' + bonus + '</b> ' + X(used ? 'hud.helpUsed' : 'hud.helpReady') + '</span></div></div>';
     }).join('');
     var ev = S.lastEvent, evb = layoutBox('eventCard'), lateInCard = BL.boxes.lateBanner === BL.boxes.eventCard;
-    function lateLine(cls) { return '<div class="' + cls + '" id="lateBanner"' + tipA(P('presence.ui.lateBanner')) + '>' + img(A.moons[Math.min(S.round, A.moons.length) - 1], 'ic', '') + '<span>' + X('presence.ui.lateBanner') + '</span></div>'; }
+    function lateLine(cls) { var LI = V4 ? A.hours : A.moons; return '<div class="' + cls + '" id="lateBanner"' + tipA(P('presence.ui.lateBanner')) + '>' + img(LI[Math.min(S.round, LI.length) - 1], 'ic', '') + '<span>' + X('presence.ui.lateBanner') + '</span></div>'; }
     var evFp = PON() && evDef(ev.id).footprint, late = isLate();
-    var evHTML = '<div class="hud evcard' + (ev.cancelled ? ' cancelled' : '') + (late ? ' late' : '') + '" id="nightEvent" style="' + box(evb) + '"' + tipA(P('hud.eventTip', { event: eventName(ev.id), effect: ev.cancelled ? P('hud.eventCancelled') : P('eventEffects.' + ev.id) }) + ' ' + fmt(TXT.events[ev.id] || '') + (evFp ? ' ' + P('presence.ui.footprintTip') : '')) + '>' +
+    var evHTML = '<div class="hud evcard' + (ev.cancelled ? ' cancelled' : '') + (late ? ' late' : '') + '" id="nightEvent" style="' + box(evb) + '"' + tipA(P('hud.eventTip', { event: eventName(ev.id), effect: ev.cancelled ? P('hud.eventCancelled') : P('eventEffects.' + ev.id) }) + ' ' + storyFlavour(ev.id) + (evFp ? ' ' + P('presence.ui.footprintTip') : '')) + '>' +
       '<div class="evn">' + esc(eventName(ev.id)) + '</div><div class="eve">' + (ev.cancelled ? X('hud.eventCancelled') : X('eventEffects.' + ev.id)) + '</div>' + (ev.cancelled ? icon('barOnDoor', { cls: 'evbar', alt: '' }) : '') + (evFp ? footprintMark('evfp') : '') +
       '<div class="evtonight">' + X('hud.tonight') + '</div>' + (late && lateInCard ? lateLine('evlate') : '') + '</div>';
     // nights 5-6: the thin late_nights_banner strip (layout v2); falls back to a line inside the event card if both share a box
@@ -468,10 +510,11 @@
       hint = '<div class="hint" id="hint" style="' + box(layoutBox('hint')) + '"><span>' + esc(ht) + '</span><button id="hintOff"' + tipA(P('ui.hintsTip')) + '>×</button></div>';
     }
     var skyLate = PON() && PCFG.lateBoard === 'overlay' && A.board.skyLate ? '<img class="skyLate' + (isLate() && U.skyShown ? ' on' : '') + '" id="skyLate" src="' + A.board.skyLate + '" alt="" draggable="false">' : '';
-    stage.innerHTML = bgHTML('board') + skyLate + zones + bar + tokenHTML('C2') + tokenHTML('C1') + tokenHTML('POV') +
+    stage.innerHTML = bgHTML('board') + skyLate + zones + bar + (c.noCompanions ? '' : tokenHTML('C2') + tokenHTML('C1')) + tokenHTML('POV') +
       turn + goal + night + dread + approachHTML() + nextEventHTML() + qs2 + clues + deck + acts + helps + evHTML + logHTML + hint +
       '<div class="dropPlay" id="dropPlay" style="' + box({ x: zoneBox('house').x, y: zoneBox('house').y, w: zoneBox('treeline').x + zoneBox('treeline').w - zoneBox('house').x, h: zoneBox('house').h }) + '"><span>' + X('board.playZone') + '</span></div>' +
-      handHead + hand + (U.tray ? trayHTML() : '') + layoutOutlines();
+      handHead + hand + (U.tray ? trayHTML() : '') + layoutOutlines() +
+      (V4 && U.tut ? '<button class="hud skipTut" id="skipTut" style="' + box(layoutBox('skipTutorial')) + '"' + tipA(P('ui.coachSkipTip')) + '>' + X('ui.coachSkip') + '</button>' : ''); // v0.4: Skip tutorial stays in the corner
     wireEncounter();
     // animate token moves (FLIP)
     ['POV', 'C1'].forEach(function (w) {
@@ -486,13 +529,14 @@
     spawnFeed();
     renderDebug(); placeCoach(); if (U.tut) setTimeout(placeCoach, 350);
   }
+  function storyFlavour(evId) { return V4 && ECFG.noStory ? '' : fmt(TXT.events[evId] || ''); } // v0.3 story line under an event (none in v0.4)
   // ---------- v0.3 The Approach: track, face-up next event, visit warning, late-nights banner (greybox until Ola's art) ----------
   function PA(k) { return (A.presence || {})[k] || null; }      // expected manifest keys: see README "v0.3 art keys"
   function footprintMark(cls) { var f = PA('footprint'); return '<span class="fpmark ' + (cls || '') + '"' + tipA(P('presence.ui.footprintTip')) + '>' + (f ? '<img src="' + f + '" alt="">' : '<span class="gbfp">👣</span>') + '</span>'; }
   function approachHTML() {
     if (!PON()) return '';
-    var G = U.game, S = G.state, sp = G.cfg.presence.spaces, fc = G.presenceForecast(), warn = !!(fc && fc.visit) && S.phase === 'actions';
-    var ab = layoutBox('approach'), TS = PA('trackSize') || [1000, 280], k = ab.h / TS[1], mk = PA('marker' + PDIR) || PA('marker'), ms = BL.presenceMarker;
+    var G = U.game, S = G.state, sp = G.cfg.presence.spaces, fc = G.presenceForecast(), warn = !!(fc && fc.visit) && S.phase === 'actions' && !(V4 && S.bars); // v0.4: only while no Bar is up
+    var ab = layoutBox('approach'), TS = PA('trackSize') || [1000, 280], k = ab.h / TS[1], mk = (PDIR && PA('marker' + PDIR)) || PA('marker'), ms = BL.presenceMarker;
     var steps = PA('steps') && PA('steps').length === sp.length ? PA('steps') : sp.map(function (id, i) { return { id: id, x: 20 + i * 245, y: 16, w: 200, h: 156, name: { x: 20 + i * 245, y: 190, w: 200, h: 66 } }; });
     var cells = steps.map(function (st, i) {
       var id = sp[i], nm = term('TRACK_APPROACH_' + (i + 1));
@@ -516,7 +560,7 @@
       (id ? '<div class="c-box ne-title" data-box="next_event.title" style="' + pb('title') + '"><span>' + esc(eventName(id)) + '</span></div>' +
         (fp ? '<div class="ne-fp" style="' + pb('footprint_mark') + '"' + tipA(P('presence.ui.footprintTip')) + '>' + (PA('footprint') ? '<img src="' + PA('footprint') + '" alt="">' : '<span class="gbfp">👣</span>') + '</div>' : '') +
         '<div class="c-box ne-effect" data-box="next_event.effect" style="' + pb('effect') + '"><span>' + X('eventEffects.' + id) + '</span></div>' +
-        (fp && PT.tease[id] ? '<div class="c-box ne-tease" data-box="next_event.foreshadow" style="' + pb('foreshadow') + '"><span>' + H(PT.tease[id]) + '</span></div>' : '')
+        (fp && PT.tease && PT.tease[id] ? '<div class="c-box ne-tease" data-box="next_event.foreshadow" style="' + pb('foreshadow') + '"><span>' + H(PT.tease[id]) + '</span></div>' : '')
        : '<div class="c-box ne-title" style="' + pb('title') + '"><span>' + X('presence.ui.nextNone') + '</span></div>') + '</div>';
   }
   function nextEventHTML() {
@@ -528,6 +572,7 @@
   function barSavedNow() { var fc = PON() && U.game ? U.game.presenceForecast() : null; return !!(fc && fc.barSaved); }
   function isLate() { var G = U.game; return PON() && G.state.round >= G.cfg.presence.lateFromNight; }
   function lineHTML(raw) { var lp = lineParts(raw); return lp.who ? '<b>' + esc(Skin.speaker(lp.who, names())) + ':</b> ' + H(lp.text) : H(lp.narr); }
+  function flav(raw) { if (!raw) return null; return V4 && ECFG.noStory && lineParts(raw).who ? null : raw; } // v0.4: flavour narration only, no character voice lines
   // centre banners (night start, visit) queue so they never overlap
   function queueBanner(html, cls, ms) {
     var now = Date.now(), at = Math.max(now, U.bannerUntil || 0); ms = ms || 2600; U.bannerUntil = at + ms;
@@ -546,11 +591,12 @@
     var i = 0, t = setInterval(function () { i++; if (i < frames.length) im.src = frames[i]; else { clearInterval(t); setTimeout(function () { el.remove(); }, ms || 600); } }, 1000 / (BL.fxFps || 8));
   }
   function visitBanner(f) {
-    var fx = null, art = PA('art' + PDIR);
+    var fx = null, art = PDIR ? PA('art' + PDIR) : null;
     if (f.type === 'visit') { playFrames(PA('handleFx'), 'doorHandle', 900, 'handle'); playFrames(PA('frostWindowFx'), 'window', 1600, 'frost'); playFrames(PA('frostScreenFx'), 'fullStage', 1400, 'frostscreen'); }
     else if (PA('barStopped')) playFrames([PA('barStopped'), PA('barStopped'), PA('barStopped'), PA('barStopped'), PA('barStopped'), PA('barStopped')], 'barOnDoor', 1200, 'barstop');
-    if (f.type === 'visit') queueBanner((art ? '<img class="vart" src="' + art + '" alt="">' : '') + '<div class="nb1">' + X('presence.ui.visitTitle') + '</div><div class="nb4 vline">' + lineHTML(PT.door[f.line % PT.door.length]) + '</div><div class="nb3">' + X('presence.ui.visitEffect') + '</div><div class="nb4 vline">' + lineHTML(PT.c1) + '</div>', 'visit', 4200);
-    else queueBanner('<div class="nb1">' + X('presence.ui.blockedTitle') + '</div><div class="nb4 vline">' + lineHTML(PT.turnAway.bar) + '</div>', 'blocked', 3400);
+    var door = flav(PT.door[f.line % PT.door.length]), c1 = ECFG.noCompanions ? null : flav(PT.c1), bl = flav(PT.turnAway.bar);
+    if (f.type === 'visit') queueBanner((art ? '<img class="vart" src="' + art + '" alt="">' : '') + '<div class="nb1">' + X('presence.ui.visitTitle') + '</div>' + (door ? '<div class="nb4 vline">' + lineHTML(door) + '</div>' : '') + '<div class="nb3">' + X('presence.ui.visitEffect') + '</div>' + (c1 ? '<div class="nb4 vline">' + lineHTML(c1) + '</div>' : ''), 'visit', 4200);
+    else queueBanner('<div class="nb1">' + X('presence.ui.blockedTitle') + '</div>' + (bl ? '<div class="nb4 vline">' + lineHTML(bl) + '</div>' : ''), 'blocked', 3400);
   }
 
   function layoutOutlines() { // ?layout=1 or Debug → "boxes": draws every layout box over the art to check alignment
@@ -563,8 +609,9 @@
   }
   function nightBanner() {
     var S = U.game.state, ev = S.lastEvent, late = isLate();
-    queueBanner('<div class="nb1">' + X('hud.night', { n: S.round, total: U.game.cfg.rounds }) + '</div><div class="nb2">' + esc(eventName(ev.id)) + (PON() && evDef(ev.id).footprint ? footprintMark('nbfp') : '') + '</div><div class="nb3">' + (ev.cancelled ? X('hud.eventCancelled') : X('eventEffects.' + ev.id)) + '</div><div class="nb4">' + H(TXT.events[ev.id] || '') + '</div>' +
-      (late && S.round === U.game.cfg.presence.lateFromNight ? '<div class="nb4 late">' + H(PT.late) + '</div>' : ''), late ? 'late' : '', late && S.round === U.game.cfg.presence.lateFromNight ? 3600 : 2600);
+    var firstLate = late && S.round === U.game.cfg.presence.lateFromNight, lateLine = V4 ? P('presence.ui.lateBanner') : PT.late;
+    queueBanner('<div class="nb1">' + X('hud.night', { n: S.round, total: U.game.cfg.rounds }) + '</div><div class="nb2">' + esc(eventName(ev.id)) + (PON() && evDef(ev.id).footprint ? footprintMark('nbfp') : '') + '</div><div class="nb3">' + (ev.cancelled ? X('hud.eventCancelled') : X('eventEffects.' + ev.id)) + '</div>' + (storyFlavour(ev.id) ? '<div class="nb4">' + esc(storyFlavour(ev.id)) + '</div>' : '') +
+      (firstLate && lateLine ? '<div class="nb4 late">' + H(lateLine) + '</div>' : ''), late ? 'late' : '', firstLate ? 3600 : 2600);
   }
 
   function feedText(f) {
@@ -591,7 +638,7 @@
   }
   function presenceCause(s) {
     var k = s.type || '';
-    return P('presence.ui.cause.' + k, { event: k === 'footprint' ? eventName(s.id) : '', card: k === 'offering' ? cardName(s.id) : '' });
+    return P('presence.ui.cause.' + k, { event: k === 'footprint' ? eventName(s.id) : '', card: k === 'offering' || k === 'ward' ? cardName(s.id) : '' });
   }
   function feedCause(s) {
     if (s.type === 'visit') return P('presence.ui.visitTitle');
@@ -605,7 +652,7 @@
     fresh.forEach(function (f, i) {
       if (f.type === 'visit' || f.type === 'visitBlocked') { visitBanner(f); return; } // the banner says it; no extra toast
       if (f.type === 'presence' && f.src && (f.src.type === 'visitDone' || f.src.type === 'barHeld')) return; // part of the visit banner
-      var line = f.type === 'presence' && f.src ? (f.src.type === 'comfortPush' ? PT.turnAway.comfort : f.src.type === 'offering' ? PT.turnAway.offering : f.src.type === 'searchPull' ? PT.search : null) : null;
+      var line = flav(f.type === 'presence' && f.src ? (f.src.type === 'comfortPush' ? PT.turnAway.comfort : f.src.type === 'offering' ? PT.turnAway.offering : f.src.type === 'searchPull' ? PT.search : null) : null);
       if (!feedText(f)) return;
       var tid = f.type === 'pressure' ? 'dread' : f.type === 'progress' ? 'clues' : f.type === 'c1' ? 'tok-C1' : f.type === 'bar' ? 'door' : (f.type === 'presence' || f.type === 'visit' || (f.type === 'barUsed' && f.src && f.src.type === 'visit')) ? 'approach' : 'nightEvent';
       setTimeout(function () {
@@ -638,6 +685,10 @@
     if (!can.ok) { flashMsg(cardName(id) + ': ' + can.why); return; }
     if (c.effect === 'investigateYardFromHouse') return openTray({ kind: 'card', cardId: id, stat: 'INSIGHT', zone: 1 });
     if (c.effect === 'investigateAnyZone') return openTray({ kind: 'card', cardId: id, stat: 'INSIGHT', zone: S.pov, pickZone: true });
+    if (c.effect === 'searchAdjacent' || c.effect === 'moveSearch') { // v0.4 Look Closer / Shortcut: pick an area next to you
+      var adj = [S.pov - 1, S.pov + 1].filter(function (z) { return z >= 0 && z < G.cfg.zones.length && (c.effect !== 'moveSearch' || V4CFG.shortcutEitherWay || z > S.pov); });
+      return openTray({ kind: 'card', cardId: id, stat: 'INSIGHT', zone: adj[adj.length - 1], pickZone: adj.length > 1, zones: adj, moveFirst: c.effect === 'moveSearch' });
+    }
     if (c.effect === 'readyHelp' && S.helps.c1.used && S.helps.c2.used) {
       return openPanel('<h2>' + X('cardUi.pierogiWhich') + '</h2><div class="btns">' + ['c1', 'c2'].map(function (w) { return '<button data-w="' + w + '">' + esc(Skin.speaker(w.toUpperCase(), names())) + '</button>'; }).join('') + '</div>', function () {
         all('#overlayBox [data-w]', function (b) { b.onclick = function () { closeOverlay(); act(G.play(id, { helpToReady: b.dataset.w })); tutSignal('play:' + id); }; });
@@ -647,12 +698,12 @@
   }
   function wireEncounter() {
     var G = U.game, S = G.state;
-    on('btnMenu', openMenu);
+    on('btnMenu', openMenu); on('skipTut', function () { skipCoach(); });
     on('act-end', function () { closeZoom(); var r = G.endRound(); act(r); if (r.ok) tutSignal('endTurn'); });
     actionDefs().forEach(function (d) { on('act-' + d.id, function () { if (d.ok) d.run(); }); });
     on('hintOff', function () { U.hints = false; renderEncounter(); });
     all('.zone', function (z) {
-      z.onclick = function () { var i = +z.dataset.zone; if (canAct() && Math.abs(i - S.pov) === 1 && !U.tray) act(G.move(i)); };
+      z.onclick = function () { var i = +z.dataset.zone; if (canAct() && Math.abs(i - S.pov) === 1 && !U.tray) { var r = G.move(i); act(r); if (r.ok) tutSignal('move:' + G.cfg.zones[i].id); } };
     });
     // a token standing in a zone is part of it: clicking the token = clicking that zone (no dead spot on the board)
     ['POV', 'C1', 'C2'].forEach(function (w) {
@@ -758,7 +809,7 @@
         '<span class="an">' + esc(cardName(id)) + '<small>' + X('roll.addPlayInstead', { effect: P('cards.' + id + '.text') }) + '</small></span>' +
         '<span class="av">' + X('roll.addRow', { n: n }) + ' ' + statIcon(T.stat, { notip: true }) + '</span><span class="ack">' + (on ? '✓' : '+') + '</span></button>';
     }).join('') : '<div class="none">' + X('roll.addNone') + '</div>';
-    var helpRows = ['c1', 'c2'].map(function (w) {
+    var helpRows = G.cfg.noCompanions ? '' : ['c1', 'c2'].map(function (w) {
       var e = G.helpEligible(w, T.stat), on = T.helps.indexOf(w) >= 0, close = G.helpBonus(w) === G.cfg.helpBonusBonded;
       var why = e.ok ? '' : S.helps[w].used ? P('reasons.helpUsed') : e.why.indexOf('House') >= 0 ? P('reasons.helpNotHome') : P('reasons.helpWrongStat');
       return '<button class="helprow' + (on ? ' on' : '') + '" data-help="' + w + '"' + (e.ok && !T.result ? '' : ' disabled') + tipA(e.ok ? P('roll.helpOffer', { who: Skin.speaker(w.toUpperCase(), names()), bonus: G.helpBonus(w), close: close ? P('roll.helpCloseTag') : '' }) : why) + '>' +
@@ -770,6 +821,7 @@
       return '<div class="face ' + f.result + (r && r.roll === f.roll ? ' rolled' : '') + '"' + tipA(P('roll.faceTip', { face: f.roll, result: res })) + '><div class="fn">' + f.roll + '</div><div class="ft">' + (f.token === 'STAR' ? icon('STAR', { alt: '' }) : esc(faceLabel(f.token))) + '</div><div class="fr">' + esc(res) + '</div></div>';
     }).join('');
     var zonePick = T.pickZone && !r ? '<div class="zonepick">' + X('roll.zonePick') + ' ' + G.cfg.zones.map(function (z, i) {
+      if (T.zones && T.zones.indexOf(i) < 0) return '';
       return '<button data-zonepick="' + i + '" class="' + (T.zone === i ? 'on' : '') + '">' + esc(zoneName(z.id)) + ' · ' + X('board.zoneBadge', { need: searchNeed(i), gain: z.progress }) + '</button>'; }).join('') + '</div>' : '';
     var resultBox = r ? '<div class="rollResult ' + (r.star ? 'omen' : r.success ? 'win' : 'fail') + '" id="rollResult"><div class="rr1">' +
       (r.star ? X('roll.omen') : r.strong ? X(T.kind === 'steady' ? 'roll.strongComfort' : 'roll.strong') : r.success ? X('roll.success') : X('roll.fail')) + '</div><div class="rr2">' +
@@ -779,7 +831,7 @@
       '<div class="tu">' + statIcon(T.stat, { notip: true }) + X('roll.uses', { stat: statName(T.stat) }) + '</div>' +
       '<div class="tneed"' + tipA(P('roll.needTip')) + '>' + X('roll.need', { need: need }) + '</div></div>' + zonePick +
       '<div class="trayBody"><div class="tcol"><div class="th">' + X('roll.addTitle') + '</div><div class="addlist" id="rollAdd">' + addRows + '</div>' +
-        '<div class="th">' + X('roll.helpTitle') + '</div><div class="helplist">' + helpRows + '</div></div>' +
+        (helpRows ? '<div class="th">' + X('roll.helpTitle') + '</div><div class="helplist">' + helpRows + '</div>' : '') + '</div>' +
       '<div class="tcol right"><div class="parts">' + X('roll.parts', { base: pv.base, icons: pv.icons, help: pv.help }) + '</div>' +
         '<div class="total">' + X('roll.total', { total: pv.preDraw, need: need, pct: Odds.pct(od.o.p) }) + '</div>' + trayPresenceLine() +
         '<div class="th"' + tipA(P('roll.diceTip')) + '>' + X('roll.dice') + '</div><div class="faces">' + faces + '</div>' +
@@ -801,16 +853,18 @@
     all('[data-zonepick]', function (b) { b.onclick = function () { T.zone = +b.dataset.zonepick; renderEncounter(); }; });
     on('rollCancel', function () { U.tray = null; renderEncounter(); tutSignal('trayCancel'); });
     on('rollGo', function () {
+      var ts = tutStep(), want = ts && /^roll:/.test(ts.await || '') ? ts.await.slice(5) : null;
+      if (want && T.commits.indexOf(want) < 0) { flashMsg(P('v04.rollNeedsCard', { card: cardName(want) })); shakeCoach(); return; } // v0.4 guided roll: add the named card first
       var o = { commits: T.commits.slice(), helps: T.helps.slice() }, res;
       if (T.kind === 'investigate') res = G.investigate(o);
       else if (T.kind === 'steady') res = G.steady(o);
       else if (T.kind === 'holdDoor') res = G.holdDoor(o);
       else res = G.play(T.cardId, Object.assign(o, { zone: T.zone }));
       if (!res.ok) { flashMsg(res.error); return; }
-      T.result = res.test; T.commits = []; T.helps = [];
+      T.result = res.test; T.used = o.commits; T.commits = []; T.helps = [];
       renderEncounter(); tutSignal('roll'); if (T.kind === 'card') tutSignal('play:' + T.cardId);
     });
-    on('rollDone', function () { U.tray = null; renderEncounter(); });
+    on('rollDone', function () { var used = T.used || []; U.tray = null; renderEncounter(); used.forEach(function (id) { tutSignal('roll:' + id); }); });
   }
 
   // ---------- DAWN: answer the Questions ----------
@@ -902,6 +956,37 @@
     renderDebug();
   }
 
+  // ---------- v0.4 END SCREEN: win / lose_dread / lose_short (spec section 2), Play again + Play with tutorial ----------
+  function saveRun() {
+    if (U.saved) return;
+    var G = U.game, now = Date.now(), ti = U.tutInfo || {};
+    store.add(Stats.buildRecord(G, { runId: U.runId, skin: U.skin, tester: U.tester, presenceDirection: PON() ? (PDIR || 'neutral') : '', outcomeScene: G.state.result.outcome,
+      encounterSeconds: Math.round((now - U.tEncounter) / 1000), totalSeconds: Math.round((now - U.tStart) / 1000),
+      tutorial: ti.used ? (ti.skippedAt ? 'skipped@' + ti.skippedAt : ti.completed ? 'completed' : 'Y') : 'N', tutorialSkippedAt: ti.skippedAt || '' }));
+    U.saved = true;
+  }
+  function renderEndV04() {
+    U.screen = 'results'; clearToasts(); endCoach(true); saveRun();
+    var G = U.game, S = G.state, R = S.result, Pr = S.presence;
+    var rows = [['v04.end.rowClues', R.clues + ' / ' + R.clueGoal], ['v04.end.rowDread', R.finalPressure + ' / ' + G.cfg.pressureMax], ['v04.end.rowHours', R.hoursPlayed + ' / ' + G.cfg.rounds]];
+    if (Pr) rows.push(['v04.end.rowVisits', Pr.visits + ' (' + Pr.blocked + ')']);
+    // Ola's end screens (end/win|dread|dawn_fail) with live text in end_screens.boxes: title, result_line, play_again, play_with_tutorial
+    var E = A.end || { boxes: {}, bg: {}, bgSmall: {}, titleColour: {} }, EB = E.boxes, bg = (U.bgSmallOk && E.bgSmall[R.outcome]) || E.bg[R.outcome];
+    var eb = function (k, d) { return box(EB[k] || d); };
+    stage.innerHTML = (bg ? '<img class="boardbg endbg" src="' + bg + '" alt="" draggable="false">' : bgHTML('dim')) +
+      '<div class="endScreen v04 ' + R.outcome + ' t-' + (E.titleColour[R.outcome] || 'paper') + '" id="endScreen" data-result="' + R.outcome + '">' +
+      '<div class="endTitle" id="endTitle" style="' + eb('title', { x: 460, y: 96, w: 1000, h: 120 }) + '"><span>' + X('v04.end.' + R.outcome + '.title', { n: R.clues }) + '</span></div>' +
+      '<div class="endResult" id="endResult" style="' + eb('result_line', { x: 460, y: 222, w: 1000, h: 64 }) + '"><span>' + X('v04.end.' + R.outcome + '.result', { n: R.clues }) + '</span></div>' +
+      '<button class="primary big endBtn" id="bAgain" style="' + eb('play_again', { x: 610, y: 320, w: 340, h: 76 }) + '"' + tipA(P('v04.end.playAgainTip')) + '>' + X('v04.end.playAgain') + '</button>' +
+      '<button class="big endBtn" id="bTutAgain" style="' + eb('play_with_tutorial', { x: 970, y: 320, w: 340, h: 76 }) + '"' + tipA(P('v04.end.playTutorialTip')) + '>' + X('v04.end.playTutorial') + '</button>' +
+      '<div class="endStats" id="endStats">' + rows.map(function (r) { return '<span><b>' + X(r[0]) + '</b> ' + esc(r[1]) + '</span>'; }).join('') +
+      '<span class="muted">' + X('ui.savedNote', { n: store.all().length }) + '</span><button id="bStats2"' + tipA(P('ui.sendStatsTip')) + '>' + X('ui.sendStats') + '</button></div></div>';
+    on('bAgain', function () { U.seed = newSeed(); U.runId = null; U.tStart = 0; U.saved = false; startEncounter({ tutorial: false }); });
+    on('bTutAgain', function () { U.seed = newSeed(); U.runId = null; U.tStart = 0; U.saved = false; U.wantTutorial = true; startEncounter({ tutorial: true }); });
+    on('bStats2', openStats);
+    renderDebug();
+  }
+
   // ---------- overlays: menu, how to play, stats ----------
   function openPanel(html, wire) { overlay.classList.remove('hidden'); overlayBox.innerHTML = html + '<div class="btns"><button class="primary" id="ovClose"' + tipA(P('ui.closeTip')) + '>' + X('ui.close') + '</button></div>'; on('ovClose', closeOverlay); if (wire) wire(); }
   function closeOverlay() { overlay.classList.add('hidden'); overlayBox.innerHTML = ''; }
@@ -910,7 +995,7 @@
     var items = [
       ['mHow', 'ui.howToPlay', 'ui.howToPlayTip', true],
       ['mTut', 'ui.tutorial', 'ui.tutorialTip', inEnc],
-      ['mHint', 'ui.hints', 'ui.hintsTip', inEnc, U.hints],
+      ['mHint', 'ui.hints', 'ui.hintsTip', inEnc && ECFG.hintsNight2, U.hints],
       ['mStats', 'ui.stats', 'ui.statsTip', true],
       ['mSeed', 'ui.replaySeed', 'ui.replaySeedTip', !!G],
       ['mDebug', 'ui.debug', 'ui.debugTip', true, !dbg.classList.contains('hidden')],
@@ -928,8 +1013,9 @@
     });
   }
   function openHowTo() {
-    var HT = UT.howToPlay, ps = A.board.plateSlots;
+    var HT = V4 ? UT.v04.howToPlay : UT.howToPlay, ps = A.board.plateSlots;
     var plates = ECFG.zones.map(function (z) {
+      if (V4) return '<div class="plate strip"' + tipA(P('board.zoneTip.' + z.id, { need: z.investigateDifficulty, gain: z.progress })) + ' style="' + (A.board.zoneStrips[z.id] ? 'background-image:url(' + A.board.zoneStrips[z.id] + ')' : '') + '"><b>' + esc(zoneName(z.id)) + '</b> <span>' + X('board.zoneBadge', { need: z.investigateDifficulty, gain: z.progress }) + '</span></div>';
       var p = A.board.plates[z.id];
       return '<div class="plate"' + tipA(P('board.zoneTip.' + z.id, { need: z.investigateDifficulty, gain: z.progress })) + '>' + (p ? '<img src="' + p + '" alt="">' : '<div class="gbplate"></div>') +
         '<div class="c-box" data-box="plate.title" style="' + pctBox(ps.title, 480, 320) + '"><span>' + esc(zoneName(z.id)) + '</span></div>' +
@@ -937,13 +1023,14 @@
     }).join('');
     openPanel('<h2>' + H(HT.title) + '</h2><div class="howto">' + HT.body.map(function (p) { return '<p>' + H(p, { max: cfg.pressureMax }) + '</p>'; }).join('') + '</div>' +
       '<div class="plates">' + plates + '</div>' +
-      (PON() ? '<h3>' + X('presence.ui.howTitle') + '</h3><div class="howto presence" id="howPresence">' + UT.presence.ui.howRules.map(function (p) { return '<p>' + H(p) + '</p>'; }).join('') +
-        '<p class="tease">' + H(PT.howTease) + '</p></div>' : '') +
+      (PON() ? '<h3>' + X('presence.ui.howTitle') + '</h3><div class="howto presence" id="howPresence">' + L('presence.ui.howRules').map(function (p) { return '<p>' + H(p) + '</p>'; }).join('') +
+        (PT.howTease ? '<p class="tease">' + H(PT.howTease) + '</p>' : '') + '</div>' : '') +
       '<h3>' + H(HT.glossaryTitle) + '</h3><table class="gloss">' + HT.glossary.map(function (g) { return '<tr><th>' + H(g[0]) + '</th><td>' + H(g[1], { max: cfg.pressureMax }) + '</td></tr>'; }).join('') + '</table>');
   }
   function openStats() {
     var runs = store.all(), sm = Stats.summary(runs);
-    var cols = ['finishedAt', 'tester', 'seed', 'outcome', 'endReason', 'roundsPlayed', 'progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'playsVsCommits', 'tutorial', 'encounterSeconds'];
+    var cols = V4 ? ['finishedAt', 'tester', 'seed', 'result', 'clues', 'finalPressure', 'hoursPlayed', 'visits', 'visitsBlocked', 'cardsPlayed', 'tutorial', 'encounterSeconds']
+      : ['finishedAt', 'tester', 'seed', 'outcome', 'endReason', 'roundsPlayed', 'progressEarned', 'threadsResolved', 'escapedTogether', 'finalPressure', 'helpsUsed', 'playsVsCommits', 'tutorial', 'encounterSeconds'];
     openPanel('<h2>' + X('ui.statsTitle') + '</h2><p>' + X('ui.statsSummary', { runs: sm.runs, outcomes: JSON.stringify(sm.outcomes), avg: sm.avgProgressEarned, dread: sm.avgFinalPressure, safe: sm.escapedY }) + '</p>' +
       '<div class="tablewrap"><table class="stats"><tr>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>' +
       runs.slice().reverse().map(function (r) { return '<tr>' + cols.map(function (c) { return '<td>' + esc(r[c] == null ? '' : r[c]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>' +
@@ -958,15 +1045,17 @@
       function dl(txt, name, type) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
       function stamp() { return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-'); }
       on('sCopyJ', function () { copy(Stats.toJSON(store.all())); });
-      on('sCopyC', function () { copy(Stats.toCSV(store.all())); });
+      on('sCopyC', function () { copy(Stats.toCSV(store.all(), V4 ? Stats.COLUMNS_V04 : null)); });
       on('sDlJ', function () { dl(Stats.toJSON(store.all()), 'cottage-runs-' + stamp() + '.json', 'application/json'); });
-      on('sDlC', function () { dl(Stats.toCSV(store.all()), 'cottage-runs-' + stamp() + '.csv', 'text/csv'); });
+      on('sDlC', function () { dl(Stats.toCSV(store.all(), V4 ? Stats.COLUMNS_V04 : null), 'cottage-runs-' + (V4 ? 'v04-' : '') + stamp() + '.csv', 'text/csv'); });
       on('sClear', function () { if (confirm(P('ui.clearConfirm'))) { store.clear(); openStats(); } });
     });
   }
 
   // ---------- guided Night 1 (coach marks) ----------
-  var STEPS = JSON.parse(JSON.stringify(UT.onboarding.steps.filter(function (st) { return !st.needsPresence || PON(); })).replace(/@tutorialCard/g, (ECFG.tutorialHand || [])[1] || 'kompot'));
+  // v0.4: Tomek's 10 steps (guided Hours 1-2, then the handoff); v0.3: the guided Night 1
+  var STEPS = V4 ? JSON.parse(JSON.stringify(UT.v04.onboarding.steps))
+    : JSON.parse(JSON.stringify(UT.onboarding.steps.filter(function (st) { return !st.needsPresence || PON(); })).replace(/@tutorialCard/g, (ECFG.tutorialHand || [])[1] || 'kompot'));
   // tour play step: Kompot keeps its line; Bread and Salt gets the line for the Presence direction (neutral with no direction)
   STEPS.forEach(function (st) {
     if (st.voiceBread && ((ECFG.tutorialHand || [])[1] === 'bread')) st.voice = PON() ? (st.voiceBread[PDIR] || st.voiceBread.neutral) : st.voiceBread.neutral;
@@ -980,18 +1069,19 @@
     var s = tutStep();
     if (s && s.id === 'clue' && U.tray) { U.tray = null; }
     U.tut.i++;
-    if (U.tut.i >= STEPS.length) { endCoach(); }
+    if (U.tut.i >= STEPS.length) { if (U.tutInfo) U.tutInfo.completed = true; if (U.game) U.game.endTutorial(); endCoach(); } // v0.4 handoff: tooltips only from here, guided rolls end
     if (U.screen === 'encounter') renderEncounter();
   }
   function tutSignal(sig) {
     var s = tutStep(); if (!s) return;
-    if (sig === 'trayCancel' && s.id === 'add') { U.tut.i = STEPS.map(function (x) { return x.id; }).indexOf('search'); placeCoach(); return; }
+    if (sig === 'trayCancel' && s.id === 'add' && !V4) { U.tut.i = STEPS.map(function (x) { return x.id; }).indexOf('search'); placeCoach(); return; }
     if (s.await === sig) tutAdvance();
   }
   function endCoach(silent) {
     if (U.tut && !silent) safeSet(TUT_KEY, '1');
     U.tut = null; coach.classList.add('hidden'); coach.innerHTML = '';
   }
+  function shakeCoach() { var b = document.getElementById('coachBubble'); if (b) { b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); } }
   function skipCoach() {
     var s = tutStep(); if (U.tutInfo) U.tutInfo.skippedAt = s ? s.id : null;
     if (U.game) U.game.endTutorial();
@@ -1001,7 +1091,8 @@
     var s = tutStep();
     if (!s || U.screen !== 'encounter') { coach.classList.add('hidden'); return; }
     var W = window.innerWidth, Hh = window.innerHeight, rects = [];
-    (s.target || []).forEach(function (id) { var e = document.getElementById(id); if (e) { var r = e.getBoundingClientRect(); if (r.width) rects.push(r); } });
+    var tg = U.tray && s.trayTarget ? (U.tray.result ? ['rollResult'] : s.trayTarget) : s.target; // v0.4: inside the roll window, highlight the adds + Roll, then the result
+    (tg || []).forEach(function (id) { var e = document.getElementById(id); if (e) { var r = e.getBoundingClientRect(); if (r.width) rects.push(r); } });
     var zm = document.getElementById('zoom'); if (zm && zm.classList.contains('pinned') && (s.allow || []).some(function (x) { return /^card-/.test(x); })) rects.push(zm.getBoundingClientRect());
     var holes = rects.map(function (r) { return '<rect x="' + (r.left - 8) + '" y="' + (r.top - 8) + '" width="' + (r.width + 16) + '" height="' + (r.height + 16) + '" rx="10" fill="black"/>'; }).join('');
     var rings = rects.map(function (r) { return '<div class="coachRing" style="left:' + (r.left - 8) + 'px;top:' + (r.top - 8) + 'px;width:' + (r.width + 16) + 'px;height:' + (r.height + 16) + 'px"></div>'; }).join('');
@@ -1010,29 +1101,40 @@
     coach.innerHTML = '<svg class="coachShade" width="' + W + '" height="' + Hh + '"><defs><mask id="cm"><rect width="100%" height="100%" fill="white"/>' + holes + '</mask></defs><rect width="100%" height="100%" fill="rgba(5,8,12,.62)" mask="url(#cm)"/></svg>' + rings +
       '<div class="coachBubble" id="coachBubble"><div class="cstep">' + X('ui.coachStep', { n: n, total: STEPS.length }) + '</div>' +
       (voice ? '<div class="cvoice">' + (voice.who ? '<b>' + esc(Skin.speaker(voice.who, names())) + ':</b> ' + H(voice.text) : H(voice.narr)) + '</div>' : '') +
-      '<div class="ctext">' + H(s.text, { max: cfg.pressureMax }) + '</div>' +
-      (s.await ? '<div class="ctry">' + X('ui.coachTryIt') + '</div>' : '') +
-      '<div class="cbtns"><button id="coachSkip"' + tipA(P('ui.coachSkipTip')) + '>' + X('ui.coachSkip') + '</button>' +
+      '<div class="ctext">' + H(s.text, coachVars()) + '</div>' +
+      (s.await && s.await !== 'modal' ? '<div class="ctry">' + X('ui.coachTryIt') + '</div>' : '') +
+      '<div class="cbtns">' + (V4 ? '' : '<button id="coachSkip"' + tipA(P('ui.coachSkipTip')) + '>' + X('ui.coachSkip') + '</button>') +
       (U.tut.i > 0 && !s.await && !STEPS[U.tut.i - 1].await ? '<button id="coachBack"' + tipA(P('ui.coachBackTip')) + '>' + X('ui.coachBack') + '</button>' : '') +
-      (s.await ? '' : '<button class="primary" id="coachNext"' + tipA(P('ui.coachNextTip')) + '>' + X(n === STEPS.length ? 'ui.coachDone' : 'ui.coachNext') + ' ▸</button>') + '</div></div>';
+      (s.await && s.await !== 'modal' ? '' : '<button class="primary" id="coachNext"' + tipA(P('ui.coachNextTip')) + '>' + X(n === STEPS.length ? 'ui.coachDone' : 'ui.coachNext') + ' ▸</button>') + '</div></div>';
+    coach.classList.toggle('modal', s.await === 'modal');
+    coach.classList.toggle('v04', V4);
     coach.classList.remove('hidden');
     var b = document.getElementById('coachBubble'), bw = b.offsetWidth, bh = b.offsetHeight, x, y;
-    if (rects.length) {
+    if (V4) { // v0.4 layout v3: coach text in the hint_line strip; the handoff in tutorial_modal (stage boxes → screen pixels)
+      var sr = stage.getBoundingClientRect(), cb = layoutBox(s.await === 'modal' ? 'tutorialModal' : 'coach');
+      b.style.left = (sr.left + cb.x * SCALE) + 'px'; b.style.top = (sr.top + cb.y * SCALE) + 'px'; b.style.width = (cb.w * SCALE) + 'px';
+      b.style.minHeight = (cb.h * SCALE) + 'px'; b.style.fontSize = ((s.await === 'modal' ? 20 : 17) * SCALE) + 'px';
+    } else if (rects.length) {
       var u = rects.reduce(function (a, r) { return { l: Math.min(a.l, r.left), t: Math.min(a.t, r.top), r: Math.max(a.r, r.right), b: Math.max(a.b, r.bottom) }; }, { l: 1e9, t: 1e9, r: -1e9, b: -1e9 });
       x = (u.l + u.r) / 2 - bw / 2;
       y = u.b + 18 + bh < Hh ? u.b + 18 : u.t - 18 - bh;
       if (y < 8) { y = Math.max(8, (u.t + u.b) / 2 - bh / 2); x = u.r + 18 + bw < W ? u.r + 18 : u.l - 18 - bw; }
     } else { x = W / 2 - bw / 2; y = Hh / 2 - bh / 2; }
-    b.style.left = Math.max(8, Math.min(W - bw - 8, x)) + 'px'; b.style.top = Math.max(8, Math.min(Hh - bh - 8, y)) + 'px';
+    if (!V4) { b.style.left = Math.max(8, Math.min(W - bw - 8, x)) + 'px'; b.style.top = Math.max(8, Math.min(Hh - bh - 8, y)) + 'px'; }
     on('coachNext', function () { tutAdvance(); });
     on('coachBack', function () { U.tut.i--; renderEncounter(); });
     on('coachSkip', skipCoach);
+  }
+  function coachVars() { // live numbers for the coach text (v0.4 handoff: hours left after the guided ones, clues still needed)
+    var G = U.game, S = G ? G.state : null, gh = ECFG.tutorialGuidedHours || 0;
+    return { max: cfg.pressureMax, dread: S ? S.pressure : 0, left: G ? G.cfg.rounds - gh : 0, more: G ? Math.max(0, G.cfg.clueGoal - S.progress) : 0 };
   }
   // while a coach step is up, only the highlighted controls work (the Menu and the bubble always do)
   function tutBlock(e) {
     var s = tutStep(); if (!s || U.screen !== 'encounter') return;
     var t = e.target;
-    if (t.closest('#coachBubble') || t.closest('#overlay') || t.closest('#btnMenu') || t.closest('#debug')) return;
+    if (t.closest('#coachBubble') || t.closest('#overlay') || t.closest('#btnMenu') || t.closest('#debug') || t.closest('#skipTut')) return;
+    if (s.await === 'modal') { e.preventDefault(); e.stopPropagation(); shakeCoach(); return; }
     var allow = s.allow || [];
     if (t.closest('#tray') && allow.indexOf('tray') >= 0) return;
     var c = t.closest('[data-ctl]');
@@ -1090,7 +1192,7 @@
     if (e.key === 'Escape') { if (!overlay.classList.contains('hidden')) closeOverlay(); else if (U.pinned) closeZoom(); else if (U.tray && !U.tray.result && !U.tut) { U.tray = null; renderEncounter(); } }
     if ((e.key === ' ' || e.key === 'Enter') && (U.screen === 'vn' || U.screen === 'outro') && document.getElementById('bNext') && overlay.classList.contains('hidden')) { e.preventDefault(); vnNext(); }
   });
-  window.__ui = { STEPS: STEPS, U: U, fmt: fmt, P: P, cardHTML: cardHTML, questionCardHTML: questionCardHTML, nextEventCard: nextEventCard, renderEncounter: function () { renderEncounter(); } }; // for tests / audits
+  window.__ui = { STEPS: STEPS, U: U, fmt: fmt, P: P, cardHTML: cardHTML, questionCardHTML: questionCardHTML, nextEventCard: nextEventCard, renderEncounter: function () { renderEncounter(); }, tutGo: function (i) { if (U.tut) { U.tut.i = i; renderEncounter(); } } }; // for tests / audits
 
   fit();
   renderTitle();

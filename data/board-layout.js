@@ -14,13 +14,15 @@ var BOARD_LAYOUT = {
     nightCounter: 'night_counter',
     dread:        'dread_track',
     approach:     'approach_track',        // v0.3 threat row, next to Dread
-    questions:    'questions_row',
+    // v0.4 layout v3 (Ola): questions_row and the two Help boxes are gone from the manifest. These are the v0.3 boxes, kept ONLY so the
+    // v0.3.2 build (?v04=0) still renders (with greyboxes where its art was retired). Not used in v0.4.
+    questions:    { x: 30, y: 242, w: 1500, h: 70 },
     clues:        'clue_counter',
     deck:         'deck',
     actions:      'action_buttons',
     hand:         'hand',
-    helpC1:       'help_companion_1',
-    helpC2:       'help_companion_2',
+    helpC1:       { x: 1396, y: 841, w: 160, h: 200 },   // v0.3.2 only (see questions)
+    helpC2:       { x: 1562, y: 841, w: 160, h: 200 },   // v0.3.2 only
     nextEvent:    'next_event_preview',    // v0.3 face-up next event (hover zooms it)
     eventLog:     'event_log',
     turn:         'actions_left_end_turn', // actions left + End turn
@@ -29,14 +31,23 @@ var BOARD_LAYOUT = {
     eventCard:    'event_card',            // tonight's event (layout v2 brought it back)
     lateBanner:   'late_nights_banner',    // nights 5-6 only
     visitWarn:    'visit_warning',
-    hint:         'hint_line',             // Night 2 hint line
+    hint:         'hint_line',             // v0.3 Night 2 hint line; v0.4: the tutorial coach strip (3 lines)
+    coach:        'hint_line',             // v0.4 tutorial coach text sits here (Ola layout v3)
+    tutorialModal:'tutorial_modal',        // v0.4 tutorial handoff (step 10)
+    skipTutorial: 'skip_tutorial',         // v0.4 "Skip tutorial" corner button (tutorial only)
     tray:         'roll_tray',             // roll dialog (overlay box, in the zone band)
     // OVERRIDE (no manifest box): the night-start / visit banner, a transient overlay centred in the zone band
     banner:       { x: 460, y: 410, w: 1000, h: 220 }
   },
+  // v0.3.2-only artist slots whose files/boxes were retired in v0.4 (so ?v04=0 still lays out its Question cards, Help portraits, plates)
+  legacy: {
+    questionLayout: { art: { x: 75, y: 80, w: 600, h: 400 }, question_text: { x: 70, y: 584, w: 610, h: 270 }, cost: { x: 70, y: 880, w: 610, h: 110 }, icon: { x: 315, y: 448, w: 120, h: 120 } },
+    helpSlots: { stats: { x: 32, y: 248, w: 120, h: 52 }, text: { x: 28, y: 306, w: 264, h: 68 } },
+    plateSlots: { title: { x: 24, y: 240, w: 200, h: 30 }, need_reward: { x: 24, y: 272, w: 432, h: 36 }, markers: { x: 24, y: 24, w: 432, h: 120 } }
+  },
   zones: 'manifest',                                     // use manifest board.zones (house, yard, treeline)
-  zoneStripH: 40,                                        // live text strip at the bottom of each zone box (6px from the bottom: y722-762,
-                                                         //   clear of the Yard footprint ring, which ends at about y720 in board_bg v2)
+  zoneStripH: 40,                                        // live text strip at the bottom of each zone box (6px from the bottom: y722-762; v0.4 zones y340 h428, art strip board/zone_strip_<zone>;
+                                                         //   clear of the Yard footprint ring, which ends at about y703 in board_bg v3)
   // Token anchors as fractions (0..1) of each zone box: where each token's centre sits.
   tokenSize: 112,
   tokens: {

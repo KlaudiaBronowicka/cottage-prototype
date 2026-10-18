@@ -1,0 +1,33 @@
+v0.4 Stripped Core sim on the real engine (tools/sim-v04.js), 5000 runs per row, seed 11, --pyquirk (Hour 6 forecast like sim_v04.py), build v0.4 Stripped Core (on kit-v0.1 + rules v0.2 + v0.3.2) / build 6
+== FINAL v0.4 (N=5, steps every hour, +1 on hours 5-6, visit Dread +1)
+   naive {"win":0.069,"dread6":0.282,"short":0.649,"clues":2.12,"visits":1.81,"visit1":1,"blocked":0}
+   casual {"win":0.324,"dread6":0.138,"short":0.538,"clues":3.72,"visits":0.67,"visit1":0.64,"blocked":0.74}
+   smart {"win":0.458,"dread6":0.165,"short":0.377,"clues":3.96,"visits":0.54,"visit1":0.53,"blocked":0.7}
+==   same, N=4
+   naive {"win":0.123,"dread6":0.282,"short":0.595,"clues":2.12,"visits":1.81,"visit1":1,"blocked":0}
+   casual {"win":0.45,"dread6":0.138,"short":0.412,"clues":3.72,"visits":0.67,"visit1":0.64,"blocked":0.74}
+   smart {"win":0.587,"dread6":0.146,"short":0.268,"clues":3.58,"visits":0.53,"visit1":0.52,"blocked":0.64}
+==   same, N=6
+   naive {"win":0.018,"dread6":0.282,"short":0.7,"clues":2.12,"visits":1.81,"visit1":1,"blocked":0}
+   casual {"win":0.139,"dread6":0.138,"short":0.723,"clues":3.72,"visits":0.67,"visit1":0.64,"blocked":0.74}
+   smart {"win":0.249,"dread6":0.18,"short":0.571,"clues":4.22,"visits":0.58,"visit1":0.56,"blocked":0.71}
+==   same, visit Dread +2
+   naive {"win":0.023,"dread6":0.669,"short":0.308,"clues":1.81,"visits":1.56,"visit1":1,"blocked":0}
+   casual {"win":0.257,"dread6":0.302,"short":0.441,"clues":3.66,"visits":0.66,"visit1":0.64,"blocked":0.74}
+   smart {"win":0.373,"dread6":0.331,"short":0.296,"clues":3.83,"visits":0.51,"visit1":0.51,"blocked":0.7}
+==   same, no late escalation
+   naive {"win":0.107,"dread6":0.147,"short":0.746,"clues":2.31,"visits":1.08,"visit1":0.99,"blocked":0}
+   casual {"win":0.388,"dread6":0.076,"short":0.536,"clues":3.91,"visits":0.19,"visit1":0.19,"blocked":0.61}
+   smart {"win":0.538,"dread6":0.088,"short":0.374,"clues":4.14,"visits":0.12,"visit1":0.12,"blocked":0.56}
+==   same, Bar not saved for the visit
+   naive {"win":0.069,"dread6":0.282,"short":0.649,"clues":2.12,"visits":1.81,"visit1":1,"blocked":0}
+   casual {"win":0.35,"dread6":0.104,"short":0.546,"clues":3.79,"visits":1.25,"visit1":0.99,"blocked":0}
+   smart {"win":0.492,"dread6":0.125,"short":0.382,"clues":4.04,"visits":1.12,"visit1":0.96,"blocked":0}
+== Fallback: footprints on 7/8, start on Yard, N=5
+   naive {"win":0.071,"dread6":0.263,"short":0.666,"clues":2.14,"visits":1.81,"visit1":1,"blocked":0}
+   casual {"win":0.324,"dread6":0.134,"short":0.542,"clues":3.67,"visits":0.8,"visit1":0.75,"blocked":0.64}
+   smart {"win":0.449,"dread6":0.167,"short":0.384,"clues":3.9,"visits":0.62,"visit1":0.6,"blocked":0.71}
+== Reference: v0.3-style footprints 4/8, start Treeline, N=5
+   naive {"win":0.176,"dread6":0.084,"short":0.74,"clues":2.71,"visits":0.92,"visit1":0.89,"blocked":0}
+   casual {"win":0.484,"dread6":0.049,"short":0.466,"clues":4.4,"visits":0.36,"visit1":0.35,"blocked":0.35}
+   smart {"win":0.627,"dread6":0.046,"short":0.327,"clues":4.38,"visits":0.11,"visit1":0.11,"blocked":0.47}
